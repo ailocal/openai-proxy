@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ailocal.proxy</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/ailocal-proxy</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>AILOCAL_OPENAI_API_HOST</key>
+        <string>api.openai.com</string>
+        <key>AILOCAL_PROXY_DEBUG</key>
+        <string>true</string>
+        <key>AILOCAL_PROXY_PORT</key>
+        <string>2020</string>
+        <key>AILOCAL_WHISPER_API_ENDPOINT</key>
+        <string>http://studio:2022/audio/transcriptions</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/ailocal-proxy.out</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/ailocal-proxy.err</string>
+</dict>
+</plist>
