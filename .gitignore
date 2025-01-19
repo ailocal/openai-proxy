@@ -1,0 +1,5 @@
+.aider*
+.env
+config/env
+config/haproxy/openai-proxy.cfg
+test/fixtures/e2e.env

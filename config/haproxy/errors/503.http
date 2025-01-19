@@ -3,4 +3,4 @@ Cache-Control: no-cache
 Connection: close
 Content-Type: text/plain
 
-ailocal api-proxy router
+openai-proxy - Selectively route requests to local services.
