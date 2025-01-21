@@ -1,5 +1,21 @@
 # Common test helper functions for openai-proxy tests
 
+# Ensure realpath is available
+command -v realpath &> /dev/null || {
+    echo "Error: 'realpath' is required but not found. Please install 'coreutils' (e.g. 'brew install coreutils' on macOS)." >&2
+    return 1
+}
+
+# Get absolute path to project root using realpath to handle symlinks
+TEST_HELPER_DIR="$(dirname -- "$(realpath "${BASH_SOURCE[0]}")")"
+PROJECT_ROOT="$(realpath "${TEST_HELPER_DIR}/..")"
+
+# Fix the PROXY path to point directly to the bin/openai-proxy script
+PROXY="${PROJECT_ROOT}/bin/openai-proxy"
+
+# Set up E2E environment file path
+export E2E_ENV_FILE="${PROJECT_ROOT}/test/fixtures/e2e.env"
+
 # Service control functions
 function start_ollama_service() {
     echo "Starting Ollama service..." >&2
@@ -45,22 +61,6 @@ function stop_tts_service() {
 
 # Only run setup once
 if [[ -z "$BATS_TEST_HELPER_SETUP_DONE" ]]; then
-    # Ensure realpath is available
-    command -v realpath &> /dev/null || {
-        echo "Error: 'realpath' is required but not found. Please install 'coreutils' (e.g. 'brew install coreutils' on macOS)." >&2
-        return 1
-    }
-
-    # Get absolute path to project root using realpath to handle symlinks
-    TEST_HELPER_DIR="$(dirname -- "$(realpath "${BASH_SOURCE[0]}")")"
-    PROJECT_ROOT="$(realpath "${TEST_HELPER_DIR}/..")"
-    
-    # Fix the PROXY path to point directly to the bin/openai-proxy script
-    PROXY="${PROJECT_ROOT}/bin/openai-proxy"
-    
-    # Set up E2E environment file path
-    export E2E_ENV_FILE="${PROJECT_ROOT}/test/fixtures/e2e.env"
-    
     # Debug output - only show once
     if [[ -z "$BATS_TEST_HELPER_DEBUG_SHOWN" ]]; then
         echo "Test helper dir: $TEST_HELPER_DIR" >&2
