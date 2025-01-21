@@ -11,7 +11,8 @@ docker run --rm -v $(pwd):/data minlag/mermaid-cli \
     -i /data/docs/architecture.md \
     -o /data/docs/images/architecture.svg \
     -b transparent \
-    -w 800 -H 600
+    -w 800 -H 600 \
+    --user $(id -u):$(id -g)
 ```
 
 Important note: The current tooling will only create one image file, even if there are multiple Mermaid diagrams in the source markdown. It will render only the first Mermaid diagram it encounters. To generate multiple images, you would need to split the diagrams into separate markdown files or use a custom script to extract and process each diagram individually.
@@ -81,13 +82,15 @@ mmdc -i input.md -o output.png -w 800 -H 600
 docker run --rm -v $(pwd):/data minlag/mermaid-cli \
     -i /data/input.md \
     -o /data/output.png \
-    -b transparent
+    -b transparent \
+    --user $(id -u):$(id -g)
 
 # Generate SVG
 docker run --rm -v $(pwd):/data minlag/mermaid-cli \
     -i /data/input.md \
     -o /data/output.svg \
-    -b transparent
+    -b transparent \
+    --user $(id -u):$(id -g)
 ```
 
 ## Best Practices
