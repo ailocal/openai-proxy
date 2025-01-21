@@ -80,28 +80,19 @@ Configuration is provided via environment variables (defined in `config/env` or 
 
 ### Environment Variables
 
-All environment variables have a common prefix `OPENAI_PROXY_`.
+All environment variables have a common prefix `OPENAI_PROXY_`:
 
-Below are the variables you can set:
+- `OPENAI_PROXY_PORT`: Port to listen on (default: 2020)
+- `OPENAI_PROXY_BIND_IP`: IP address to bind to (default: 127.0.0.1)
+- `OPENAI_PROXY_BACKEND_AUDIO_TRANSCRIPTIONS`: Backend for audio transcription
+- `OPENAI_PROXY_BACKEND_CHAT_COMPLETIONS`: Backend for chat completions
+- `OPENAI_PROXY_BACKEND_AUDIO_SPEECH`: Backend for text-to-speech
+- `OPENAI_PROXY_BACKEND_OPENAI`: Default backend for other OpenAI API paths
 
-- `PORT`: Port for the proxy to listen on (default: `2020`)
-- `OPENAI_PROXY_BACKEND_<API_PATH>`: Map specific API paths to backend URLs.
-    - **Format**: The `<API_PATH>` is derived from the API endpoint path. Replace slashes `/` with underscores `_` and convert to uppercase.
-    - **Example**:
-        - To map `/v1/chat/completions` to a local backend:
+### Welcome Page
 
-            ```shell
-            OPENAI_PROXY_BACKEND_CHAT_COMPLETIONS=http://localhost:11434
-            ```
-
-        - To map `/v1/audio/transcriptions` to a local backend:
-
-            ```shell
-            OPENAI_PROXY_BACKEND_AUDIO_TRANSCRIPTIONS=http://localhost:2022
-            ```
-
-- `OPENAI_PROXY_BACKEND_DEFAULT`: Default backend URL for unmapped API paths (default: `https://api.openai.com:443`)
-- `OPENAI_PROXY_ERROR_PAGE`: Path to custom error page (optional)
+The proxy serves a welcome page at the root URL (/) showing available endpoints and their routing.
+This can be customized by modifying `config/haproxy/pages/welcome.http`.
 
 **Example**:
 
@@ -113,11 +104,21 @@ export OPENAI_PROXY_BACKEND_AUDIO_TRANSCRIPTIONS=http://localhost:2022 # whisper
 export OPENAI_PROXY_BACKEND_DEFAULT=https://api.openai.com:443
 ```
 
+### Commands
+
+- `start`: Start the proxy (default if no command specified)
+- `stop`: Stop the proxy
+- `restart`: Stop and then start the proxy  
+- `reload`: Reload the configuration without stopping
+- `status`: Show proxy status
+
 ### Command Line Arguments
 
 - `-h, --help`: Show help message and exit
 - `-v, --version`: Show version information and exit
-- `-c, --config FILE`: Specify an alternate config file path
+- `-b, --bind`: Specify the IP address to bind to (default: 127.0.0.1)
+- `-p, --port`: Specify the port to listen on (default: 2020)
+- `-c, --config`: Specify an alternate config file path
 - `--verbose`: Enable verbose output
 - `--debug`: Enable debug output
 
