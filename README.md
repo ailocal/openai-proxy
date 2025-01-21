@@ -212,3 +212,8 @@ Check service status:
 ```bash
 sudo systemctl status openai-proxy
 ```
+
+## See Also
+
+- [justsayit (addons.mozilla.org)](https://addons.mozilla.org/en-US/firefox/addon/justsayit/): Enables voice typing on many websites using any Whisper API service.
+-  
