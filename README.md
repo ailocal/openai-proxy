@@ -12,6 +12,13 @@ Use unmodified tools (like [Aider](https://aider.chat])) with self-hosted servic
 - [Ollama](https://ollama.com): Large Language Models
 - [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI): Text to Speech
 
+The OpenAI SDK's allow you to direct traffic to an alternate provider:
+
+    ```shell
+    export OPENAI_BASE_URL=http://localhost:2020/v1
+    ```
+This project provides a simple way to route different services to different places.
+
 Feel free to try it out with Whisper running on my M4 Mac Mini: https://api.ailocal.org
 
 Uses [HAProxy](https://haproxy.org), the Reliable, High Performance TCP/HTTP Load Balancer.
