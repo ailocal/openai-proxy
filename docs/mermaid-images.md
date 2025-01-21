@@ -7,6 +7,7 @@ Create an images directory and convert all Mermaid diagrams in your markdown to 
 
 ```bash
 mkdir -p docs/images
+podman unshare chown $(id -u):$(id -g) docs/images
 podman run --rm --userns=keep-id -v $(pwd):/data:Z minlag/mermaid-cli \
     -i /data/docs/architecture.md \
     -o /data/docs/images/architecture.svg \
@@ -78,12 +79,16 @@ mmdc -i input.md -o output.png -w 800 -H 600
 
 ```bash
 # Generate PNG
+mkdir -p $(dirname output.png)
+podman unshare chown $(id -u):$(id -g) $(dirname output.png)
 podman run --rm --userns=keep-id -v $(pwd):/data:Z minlag/mermaid-cli \
     -i /data/input.md \
     -o /data/output.png \
     -b transparent
 
 # Generate SVG
+mkdir -p $(dirname output.svg)
+podman unshare chown $(id -u):$(id -g) $(dirname output.svg)
 podman run --rm --userns=keep-id -v $(pwd):/data:Z minlag/mermaid-cli \
     -i /data/input.md \
     -o /data/output.svg \
@@ -119,6 +124,8 @@ podman run --rm --userns=keep-id -v $(pwd):/data:Z minlag/mermaid-cli \
 mkdir -p docs/images
 
 # Generate SVG from markdown containing mermaid diagram
+mkdir -p docs/images
+podman unshare chown $(id -u):$(id -g) docs/images
 mmdc -i docs/architecture.md \
     -o docs/images/architecture.svg \
     -b transparent \
