@@ -7,7 +7,7 @@ Create an images directory and convert all Mermaid diagrams in your markdown to 
 
 ```bash
 mkdir -p docs/images
-podman run --rm -v $(pwd):/data:Z minlag/mermaid-cli \
+podman run --rm --userns=keep-id -v $(pwd):/data:Z minlag/mermaid-cli \
     -i /data/docs/architecture.md \
     -o /data/docs/images/architecture.svg \
     -b transparent \
@@ -43,7 +43,7 @@ The tool will only process the Mermaid blocks, ignoring other content.
 Generate an SVG from a markdown file containing Mermaid diagrams:
 
 ```bash
-podman run --rm -v $(pwd):/data:Z minlag/mermaid-cli \
+podman run --rm --userns=keep-id -v $(pwd):/data:Z minlag/mermaid-cli \
     -i /data/docs/architecture.md \
     -o /data/docs/images/architecture.svg \
     -b transparent
@@ -78,13 +78,13 @@ mmdc -i input.md -o output.png -w 800 -H 600
 
 ```bash
 # Generate PNG
-podman run --rm -v $(pwd):/data:Z minlag/mermaid-cli \
+podman run --rm --userns=keep-id -v $(pwd):/data:Z minlag/mermaid-cli \
     -i /data/input.md \
     -o /data/output.png \
     -b transparent
 
 # Generate SVG
-podman run --rm -v $(pwd):/data:Z minlag/mermaid-cli \
+podman run --rm --userns=keep-id -v $(pwd):/data:Z minlag/mermaid-cli \
     -i /data/input.md \
     -o /data/output.svg \
     -b transparent
