@@ -3,20 +3,34 @@
 This diagram shows how the OpenAI Proxy routes API requests to different backends based on the endpoint path.
 
 ```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#fff',
+    'primaryTextColor': '#000',
+    'primaryBorderColor': '#666',
+    'lineColor': '#666',
+    'textColor': '#000'
+  }
+}}%%
 graph LR
-    A[User Tool\ne.g. Aider] -->|All requests to\nOPENAI_BASE_URL=\nhttp://localhost:2020| B[OpenAI Proxy\nHAProxy]
+    A["Client Tool<br/>(e.g. Aider)"] -->|"OPENAI_BASE_URL=<br/>localhost:2020"| B["OpenAI Proxy<br/>(HAProxy)"]
     
-    B -->|/v1/audio/transcriptions| C[Local Whisper Server\nport 2022]
-    B -->|/v1/chat/completions| D[Local LLM Server\nport 11434]
-    B -->|/v1/audio/speech| E[Local TTS Server\nport 8880]
-    B -->|All other /v1/* paths| F[api.openai.com]
+    B -->|"audio/transcriptions"| C["Whisper Server<br/>(port 2022)"]
+    B -->|"chat/completions"| D["LLM Server<br/>(port 11434)"]
+    B -->|"audio/speech"| E["TTS Server<br/>(port 8880)"]
+    B -->|"other /v1/* paths"| F["api.openai.com"]
 
-    style A fill:#d0f4de
-    style B fill:#90e0ef
-    style C fill:#ffddd2
-    style D fill:#ffddd2
-    style E fill:#ffddd2
-    style F fill:#ddd
+    classDef default stroke-width:2px;
+    classDef client fill:#e3f2fd,stroke:#666;
+    classDef proxy fill:#fff3e0,stroke:#666;
+    classDef service fill:#f9fbe7,stroke:#666;
+    classDef remote fill:#f5f5f5,stroke:#666;
+    
+    class A client;
+    class B proxy;
+    class C,D,E service;
+    class F remote;
 ```
 
 ## How It Works
