@@ -7,12 +7,11 @@ Create an images directory and convert all Mermaid diagrams in your markdown to 
 
 ```bash
 mkdir -p docs/images
-docker run --rm -v $(pwd):/data minlag/mermaid-cli \
+podman run --rm -v $(pwd):/data:Z minlag/mermaid-cli \
     -i /data/docs/architecture.md \
     -o /data/docs/images/architecture.svg \
     -b transparent \
-    -w 800 -H 600 \
-    --user $(id -u):$(id -g)
+    -w 800 -H 600
 ```
 
 Important note: The current tooling will only create one image file, even if there are multiple Mermaid diagrams in the source markdown. It will render only the first Mermaid diagram it encounters. To generate multiple images, you would need to split the diagrams into separate markdown files or use a custom script to extract and process each diagram individually.
@@ -44,7 +43,7 @@ The tool will only process the Mermaid blocks, ignoring other content.
 Generate an SVG from a markdown file containing Mermaid diagrams:
 
 ```bash
-docker run --rm -v $(pwd):/data minlag/mermaid-cli \
+podman run --rm -v $(pwd):/data:Z minlag/mermaid-cli \
     -i /data/docs/architecture.md \
     -o /data/docs/images/architecture.svg \
     -b transparent
@@ -56,8 +55,8 @@ docker run --rm -v $(pwd):/data minlag/mermaid-cli \
 # Install mermaid-cli via npm
 npm install -g @mermaid-js/mermaid-cli
 
-# Or use Docker instead
-docker pull minlag/mermaid-cli
+# Or use Podman instead
+podman pull minlag/mermaid-cli
 ```
 
 ## Basic Usage
@@ -75,22 +74,20 @@ mmdc -i input.md -o output.svg -b transparent
 mmdc -i input.md -o output.png -w 800 -H 600
 ```
 
-### Using Docker
+### Using Podman
 
 ```bash
 # Generate PNG
-docker run --rm -v $(pwd):/data minlag/mermaid-cli \
+podman run --rm -v $(pwd):/data:Z minlag/mermaid-cli \
     -i /data/input.md \
     -o /data/output.png \
-    -b transparent \
-    --user $(id -u):$(id -g)
+    -b transparent
 
 # Generate SVG
-docker run --rm -v $(pwd):/data minlag/mermaid-cli \
+podman run --rm -v $(pwd):/data:Z minlag/mermaid-cli \
     -i /data/input.md \
     -o /data/output.svg \
-    -b transparent \
-    --user $(id -u):$(id -g)
+    -b transparent
 ```
 
 ## Best Practices
