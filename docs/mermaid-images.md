@@ -1,5 +1,36 @@
 # Generating Images from Mermaid Diagrams
 
+## Input File Format
+
+The input markdown file can contain both text and Mermaid diagrams. The CLI will automatically find and process any Mermaid code blocks. A typical input file might look like:
+
+```markdown
+# My Architecture
+
+Here's how the system works:
+
+```mermaid
+graph LR
+    A[Client] --> B[Server]
+    B --> C[Database]
+```
+
+More explanation here...
+```
+
+The tool will only process the Mermaid blocks, ignoring other content.
+
+## Quickstart with Docker
+
+Generate an SVG from a markdown file containing Mermaid diagrams:
+
+```bash
+docker run --rm -v $(pwd):/data minlag/mermaid-cli \
+    -i /data/docs/architecture.md \
+    -o /data/docs/images/architecture.svg \
+    -b transparent
+```
+
 ## Installation
 
 ```bash
