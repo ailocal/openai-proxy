@@ -43,20 +43,15 @@ Uses [HAProxy](https://haproxy.org), the Reliable, High Performance TCP/HTTP Loa
     You'll see output like this:
 
     ```shell
-    Generating HAProxy configuration...
-    Starting openai-proxy...
-
-    OpenAI Proxy started successfully
-
     OpenAI API Routing Table
 
-    ● UP /v1/chat/completions           https://api.openai.com:443              
-    ● UP /v1/audio/speech               https://api.openai.com:443
-    ● UP /v1/audio/transcriptions       https://api.ailocal.org:443
+    ● UP    /v1/audio/transcriptions      http://localhost:9000
+    ● UP    /v1/chat/completions          http://localhost:11434
+    ● UP    /v1/audio/speech              http://localhost:8080
 
-    Default Backend: https://api.openai.com:443
+    OpenAI API Backend: https://api.openai.com:443
 
-    Listening on: http://0.0.0.0:2020
+    Listening on: http://127.0.0.1:2020
     ```
 
     The status indicators show:
