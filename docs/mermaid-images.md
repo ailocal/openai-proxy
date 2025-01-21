@@ -1,4 +1,22 @@
 # Generating Images from Mermaid Diagrams
+A guide to converting Mermaid diagrams in markdown files to high-quality SVG images using Docker or npm tools.
+
+## Quickstart
+
+Create an images directory and convert all Mermaid diagrams in your markdown to SVGs:
+
+```bash
+mkdir -p docs/images
+docker run --rm -v $(pwd):/data minlag/mermaid-cli \
+    -i /data/docs/architecture.md \
+    -o /data/docs/images/architecture.svg \
+    -b transparent \
+    -w 800 -H 600
+```
+
+Important note: The current tooling will only create one image file, even if there are multiple Mermaid diagrams in the source markdown. It will render only the first Mermaid diagram it encounters. To generate multiple images, you would need to split the diagrams into separate markdown files or use a custom script to extract and process each diagram individually.
+
+The suggested dimensions (800x600) are optimized for GitHub README display - wide enough to be readable but not so large that they dominate the page or require scrolling on typical displays.
 
 ## Input File Format
 
