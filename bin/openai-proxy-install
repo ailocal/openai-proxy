@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+set -o nounset -o pipefail -o errexit
+
+# Color constants
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+SCRIPT_DIR="$(dirname -- "$(realpath "${BASH_SOURCE[0]}")")"
+
+function show_help() {
+    echo "Usage: openai-proxy-install [OPTIONS]"
+    echo
+    echo "Install openai-proxy as a service"
+    echo
+    echo "Options:"
+    echo "  -h, --help     Show this help message and exit"
+    echo "  --system       Install as system service (requires root)"
+    echo "  --user         Install as user service (default)"
+    echo
+}
+
+function install_system_service() {
+    echo -e "${YELLOW}Installing openai-proxy system service...${NC}"
+
+    # Create system user and group
+    if ! id openai-proxy &>/dev/null; then
+        echo "Creating system user and group: openai-proxy"
+        useradd -r -s /bin/false openai-proxy
+    fi
+
+    # Create configuration directories
+    echo "Setting up configuration directories"
+    mkdir -p /etc/openai-proxy/haproxy/{errors,pages}
+
+    # Copy configuration files
+    cp "$SCRIPT_DIR/../config/env" /etc/openai-proxy/
+    cp "$SCRIPT_DIR/../config/haproxy/openai-proxy.cfg.template" /etc/openai-proxy/haproxy/
+    cp "$SCRIPT_DIR/../config/haproxy/errors/503.http" /etc/openai-proxy/haproxy/errors/
+    cp "$SCRIPT_DIR/../config/haproxy/pages/welcome.http" /etc/openai-proxy/haproxy/pages/
+
+    # Set permissions
+    chown -R openai-proxy:openai-proxy /etc/openai-proxy
+    chmod 640 /etc/openai-proxy/env
+    chmod 644 /etc/openai-proxy/haproxy/*.template
+    chmod 644 /etc/openai-proxy/haproxy/errors/*
+    chmod 644 /etc/openai-proxy/haproxy/pages/*
+
+    # Install the binary
+    echo "Installing binary"
+    if [ -f /usr/local/bin/openai-proxy ]; then
+        echo "Binary already exists in /usr/local/bin/"
+    else
+        cp "$SCRIPT_DIR/openai-proxy" /usr/local/bin/
+    fi
+    chmod 755 /usr/local/bin/openai-proxy
+
+    # Create runtime directory
+    mkdir -p /var/run/openai-proxy
+    chown openai-proxy:openai-proxy /var/run/openai-proxy
+    chmod 755 /var/run/openai-proxy
+
+    # Install the systemd service
+    echo "Installing systemd service"
+    cp "$SCRIPT_DIR/../config/systemd/openai-proxy.service" /etc/systemd/system/
+    systemctl daemon-reload
+
+    echo -e "${GREEN}System service installation complete!${NC}"
+    echo
+    echo "To start the service:"
+    echo "  systemctl enable openai-proxy"
+    echo "  systemctl start openai-proxy"
+    echo
+    echo "To check status:"
+    echo "  systemctl status openai-proxy"
+}
+
+function install_user_service() {
+    echo -e "${YELLOW}Installing openai-proxy user service...${NC}"
+
+    # Create user config directory
+    echo "Setting up configuration directories"
+    mkdir -p ~/.config/openai-proxy/haproxy/{errors,pages}
+    mkdir -p ~/.local/bin
+    mkdir -p ~/.config/systemd/user
+
+    # Copy configuration files
+    cp "$SCRIPT_DIR/../config/env" ~/.config/openai-proxy/
+    cp "$SCRIPT_DIR/../config/haproxy/openai-proxy.cfg.template" ~/.config/openai-proxy/haproxy/
+    cp "$SCRIPT_DIR/../config/haproxy/errors/503.http" ~/.config/openai-proxy/haproxy/errors/
+    cp "$SCRIPT_DIR/../config/haproxy/pages/welcome.http" ~/.config/openai-proxy/haproxy/pages/
+
+    # Install the binary
+    echo "Installing binary"
+    if [ -L ~/.local/bin/openai-proxy ]; then
+        echo "Binary already symlinked in ~/.local/bin/"
+    else
+        ln -sf "$(realpath "$SCRIPT_DIR/openai-proxy")" ~/.local/bin/
+    fi
+    chmod 755 ~/.local/bin/openai-proxy
+
+    # Install the systemd user service
+    echo "Installing user service"
+    cp "$SCRIPT_DIR/../config/systemd/openai-proxy-user.service" ~/.config/systemd/user/openai-proxy.service
+    systemctl --user daemon-reload
+
+    echo -e "${GREEN}User service installation complete!${NC}"
+    echo
+    echo "To start the service:"
+    echo "  systemctl --user enable openai-proxy"
+    echo "  systemctl --user start openai-proxy"
+    echo
+    echo "To check status:"
+    echo "  systemctl --user status openai-proxy"
+}
+
+# Process command line arguments
+install_type="user"
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        --system)
+            install_type="system"
+            shift
+            ;;
+        --user)
+            install_type="user"
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
+if [ "$install_type" = "system" ]; then
+    if [ "$EUID" -ne 0 ]; then
+        echo -e "${RED}Error: System installation requires root privileges${NC}" >&2
+        exit 1
+    fi
+    install_system_service
+else
+    install_user_service
+fi

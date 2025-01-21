@@ -1,0 +1,27 @@
+[Unit]
+Description=OpenAI API Proxy
+After=network.target
+Documentation=https://github.com/ailocal/openai-proxy
+
+[Service]
+Type=forking
+RuntimeDirectory=openai-proxy
+RuntimeDirectoryMode=0750
+
+# Environment file location
+EnvironmentFile=%h/.config/openai-proxy/env
+
+# Paths
+ExecStart=%h/.local/bin/openai-proxy start
+ExecStop=%h/.local/bin/openai-proxy stop
+ExecReload=%h/.local/bin/openai-proxy reload
+
+# Give a reasonable amount of time for the server to start up/shut down
+TimeoutSec=300
+
+# Process management
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

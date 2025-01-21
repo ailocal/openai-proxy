@@ -173,43 +173,47 @@ To verify that the proxy is working correctly:
 
 This project is licensed under the MIT License.
 
-## System Service
+## Installation
 
-To run openai-proxy as a system service:
+You can install openai-proxy either as a system service or user service:
 
-1. Create system user and group:
-    ```bash
-    sudo useradd -r -s /bin/false openai-proxy
-    ```
+### Quick Install
 
-2. Create configuration directory:
-    ```bash
-    sudo mkdir -p /etc/openai-proxy
-    sudo cp config/env /etc/openai-proxy/
-    sudo chown -R openai-proxy:openai-proxy /etc/openai-proxy
-    sudo chmod 640 /etc/openai-proxy/env
-    ```
-
-3. Install the binary:
-    ```bash
-    sudo cp bin/openai-proxy /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/openai-proxy
-    ```
-
-4. Install the systemd service:
-    ```bash
-    sudo cp config/systemd/openai-proxy.service /etc/systemd/system/
-    sudo systemctl daemon-reload
-    ```
-
-5. Start and enable the service:
-    ```bash
-    sudo systemctl enable openai-proxy
-    sudo systemctl start openai-proxy
-    ```
-
-Check service status:
 ```bash
+# Install using make (defaults to user installation)
+make install
+
+# For system-wide installation (requires root)
+sudo make install ARGS="--system"
+```
+
+Or install manually using one of these methods:
+
+### User Service (Recommended for development)
+
+```bash
+# Install as user service
+bin/openai-proxy-install --user
+
+# Start the service
+systemctl --user enable openai-proxy
+systemctl --user start openai-proxy
+
+# Check status
+systemctl --user status openai-proxy
+```
+
+### System Service (For production/servers)
+
+```bash
+# Install as system service (requires root)
+sudo bin/openai-proxy-install --system
+
+# Start the service
+sudo systemctl enable openai-proxy
+sudo systemctl start openai-proxy
+
+# Check status
 sudo systemctl status openai-proxy
 ```
 
