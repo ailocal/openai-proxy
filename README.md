@@ -25,7 +25,7 @@ Uses [HAProxy](https://haproxy.org), the Reliable, High Performance TCP/HTTP Loa
 
 ## How It Works
 
-![Architecture](docs/images/architecture.png)
+![Architecture](docs/images/architecture.mmd.svg)
 
 1. **Tool Configuration**: Tools that use the OpenAI API (like Aider) check the `OPENAI_BASE_URL` environment variable
 2. **Request Routing**: When set to `http://localhost:2020`, all API requests go through the OpenAI Proxy
