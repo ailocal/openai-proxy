@@ -7,8 +7,10 @@ Create an images directory and convert all Mermaid diagrams in your markdown to 
 
 ```bash
 mkdir -p docs/images
-podman unshare chown $(id -u):$(id -g) docs/images
-podman run --rm --userns=keep-id -v $(pwd):/data:Z minlag/mermaid-cli \
+podman run --rm \
+    -v "$(pwd)":/data \
+    --security-opt label=disable \
+    minlag/mermaid-cli \
     -i /data/docs/architecture.md \
     -o /data/docs/images/architecture.svg \
     -b transparent \
