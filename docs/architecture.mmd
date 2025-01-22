@@ -1,5 +1,5 @@
 graph LR
-    A["Client Tool"] -->|"OPENAI_BASE_URL=http\://localhost:2020/v1"| B["OpenAI Proxy"]
+    A["Client Tool"] -->|"OPENAI_BASE_URL=<br/>http\://localhost:2020/v1"| B["OpenAI Proxy"]
     
     B -->|"/v1/audio/transcriptions"| C["Whisper Server<br/>https\://api.ailocal.org"]
     B -->|"/v1/chat/completions"| D["LLM Server<br/>http\://studio:11434"]
