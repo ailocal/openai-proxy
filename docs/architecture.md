@@ -3,16 +3,6 @@
 This diagram shows how the OpenAI Proxy routes API requests to different backends based on the endpoint path.
 
 ```mermaid
-%%{init: {
-  'theme': 'base',
-  'themeVariables': {
-    'primaryColor': '#fff',
-    'primaryTextColor': '#000',
-    'primaryBorderColor': '#666',
-    'lineColor': '#666',
-    'textColor': '#000'
-  }
-}}%%
 graph LR
     A["Client Tool<br>(e.g. Aider)"] -->|"OPENAI_BASE_URL=<br>localhost:2020"| B["OpenAI Proxy<br>(HAProxy)"]
     
@@ -20,17 +10,6 @@ graph LR
     B -->|"chat/completions"| D["LLM Server<br>http://studio:11434"]
     B -->|"audio/speech"| E["TTS Server<br>http://studio:8880"]
     B -->|"other /v1/* paths"| F["api.openai.com"]
-
-    classDef default stroke-width:2px;
-    classDef client fill:#e3f2fd,stroke:#666;
-    classDef proxy fill:#fff3e0,stroke:#666;
-    classDef service fill:#f9fbe7,stroke:#666;
-    classDef remote fill:#f5f5f5,stroke:#666;
-    
-    class A client;
-    class B proxy;
-    class C,D,E service;
-    class F remote;
 ```
 
 ## How It Works
