@@ -1,7 +1,7 @@
 graph LR
     A["Client Tool"] -->|"OPENAI_BASE_URL=<br/>http\://localhost:2020/v1"| B["OpenAI Proxy"]
     
-    B -->|"/v1/audio/transcriptions"| C["Whisper Server<br/>https\://api.ailocal.org"]
-    B -->|"/v1/chat/completions"| D["LLM Server<br/>http\://studio:11434"]
-    B -->|"/v1/audio/speech"| E["TTS Server<br/>http\://studio:8880"]
+    B -->|"/v1/audio/transcriptions"| C["Whisper ASR<br/>https\://api.ailocal.org"]
+    B -->|"/v1/chat/completions"| D["Ollama LLM<br/>http\://localhost:11434"]
+    B -->|"/v1/audio/speech"| E["Kokoro TTS Server<br/>http\://localhost:8880"]
     B -->|"other /v1/* paths"| F["https\://api.openai.com"]
