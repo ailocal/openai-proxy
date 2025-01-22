@@ -1,4 +1,5 @@
 # Generating Images from Mermaid Diagrams
+
 A guide to converting Mermaid diagrams in markdown files to high-quality SVG images using Docker or npm tools.
 
 ## Quickstart
