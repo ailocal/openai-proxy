@@ -4,12 +4,12 @@ This diagram shows how the OpenAI Proxy routes API requests to different backend
 
 ```mermaid
 graph LR
-    A["Client Tool<br>(e.g. Aider)"] -->|"OPENAI_BASE_URL=<br>localhost:2020"| B["OpenAI Proxy<br>(HAProxy)"]
+    A[Client Tool<br/>(e.g. Aider)] -->|OPENAI_BASE_URL=<br/>localhost:2020| B[OpenAI Proxy<br/>(HAProxy)]
     
-    B -->|"audio/transcriptions"| C["Whisper Server<br>https://api.ailocal.org"]
-    B -->|"chat/completions"| D["LLM Server<br>http://studio:11434"]
-    B -->|"audio/speech"| E["TTS Server<br>http://studio:8880"]
-    B -->|"other /v1/* paths"| F["api.openai.com"]
+    B -->|audio/transcriptions| C[Whisper Server<br/>https://api.ailocal.org]
+    B -->|chat/completions| D[LLM Server<br/>http://studio:11434]
+    B -->|audio/speech| E[TTS Server<br/>http://studio:8880]
+    B -->|other /v1/* paths| F[api.openai.com]
 ```
 
 ## How It Works
