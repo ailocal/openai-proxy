@@ -51,14 +51,12 @@ install_haproxy() {
 create_directories() {
     echo -e "${YELLOW}Creating required directories...${NC}"
     sudo mkdir -p /etc/haproxy/conf.d
-    sudo mkdir -p /etc/haproxy/pages
 }
 
 # Copy configuration files
 copy_files() {
     echo -e "${YELLOW}Copying configuration files...${NC}"
     sudo cp config/haproxy/conf.d/openai-proxy.cfg /etc/haproxy/conf.d/
-    sudo cp config/haproxy/pages/welcome.http /etc/haproxy/pages/
 }
 
 # Verify configuration
