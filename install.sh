@@ -24,7 +24,21 @@ fi
 # Check if we need sudo for a directory
 need_sudo() {
     local dir="$1"
+    # If directory doesn't exist, check parent directory
+    if [ ! -e "$dir" ]; then
+        dir=$(dirname "$dir")
+    }
+    # Check if we can write to the directory
     [ ! -w "$dir" ]
+}
+
+# Check if we need sudo for any operations
+check_sudo_requirement() {
+    if need_sudo "/etc/haproxy" || need_sudo "/etc/haproxy/conf.d"; then
+        echo -e "${YELLOW}Some operations require sudo access.${NC}"
+        # Cache sudo credentials
+        sudo -v
+    fi
 }
 
 # Install HAProxy if not present
@@ -122,4 +136,5 @@ main() {
 }
 
 # Run main installation
+check_sudo_requirement
 main
