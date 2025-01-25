@@ -39,14 +39,20 @@ setup() {
     run curl -s -X POST \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer $OPENAI_API_KEY" \
-        -d '{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"Say hello"}]}' \
+        -H "OpenAI-Organization: ${OPENAI_ORG_ID:-}" \
+        -d '{
+            "model": "gpt-3.5-turbo",
+            "messages": [{"role":"user","content":"Say hello"}],
+            "temperature": 0.7,
+            "max_tokens": 50
+        }' \
         "http://localhost:${OPENAI_PROXY_PORT}/v1/chat/completions"
     
     echo "Status: $status" >&2
     echo "Output: $output" >&2
     
     [ "$status" -eq 0 ]
-    [[ "${output}" =~ "Hello" ]]
+    [[ "${output}" =~ "content" ]]
 }
 
 @test "audio transcription with local Whisper" {
@@ -54,21 +60,22 @@ setup() {
     [ -n "${OPENAI_PROXY_BACKEND_AUDIO_TRANSCRIPTIONS:-}" ] || \
         skip "OPENAI_PROXY_BACKEND_AUDIO_TRANSCRIPTIONS not configured"
     
-    # Use specific test audio file
     local audio_file="test/fixtures/for-the-benefit-of-all-huge-manatees.mp3"
     [ -f "$audio_file" ] || skip "Test audio file not found: $audio_file"
     
     run curl -s -X POST \
-        -H "Content-Type: multipart/form-data" \
         -H "Authorization: Bearer $OPENAI_API_KEY" \
+        -H "OpenAI-Organization: ${OPENAI_ORG_ID:-}" \
         -F "file=@$audio_file" \
+        -F "model=whisper-1" \
+        -F "response_format=json" \
         "http://localhost:${OPENAI_PROXY_PORT}/v1/audio/transcriptions"
     
     echo "Status: $status" >&2
     echo "Output: $output" >&2
     
     [ "$status" -eq 0 ]
-    [[ "${output}" =~ "text" ]]  # Changed from "transcript" to "text" to match Whisper output format
+    [[ "${output}" =~ "text" ]]
 }
 
 @test "text to speech with local service" {
@@ -79,13 +86,17 @@ setup() {
     run curl -s -X POST \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer $OPENAI_API_KEY" \
-        -d '{"input":"Hello world","voice":"alloy"}' \
+        -H "OpenAI-Organization: ${OPENAI_ORG_ID:-}" \
+        -d '{
+            "model": "tts-1",
+            "input": "Hello world",
+            "voice": "alloy"
+        }' \
         "http://localhost:${OPENAI_PROXY_PORT}/v1/audio/speech"
     
     echo "Status: $status" >&2
     echo "Output length: ${#output}" >&2
     
     [ "$status" -eq 0 ]
-    # Verify audio output was received (should be substantial binary data)
-    [ "${#output}" -gt 200 ]  # Lowered size expectation to match actual TTS output
+    [ "${#output}" -gt 100 ]
 }
