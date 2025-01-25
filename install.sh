@@ -27,7 +27,7 @@ need_sudo() {
     # If directory doesn't exist, check parent directory
     if [ ! -e "$dir" ]; then
         dir=$(dirname "$dir")
-    }
+    fi
     # Check if we can write to the directory
     [ ! -w "$dir" ]
 }
