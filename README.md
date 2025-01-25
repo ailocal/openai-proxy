@@ -4,7 +4,7 @@
 [![HAProxy](https://img.shields.io/badge/HAProxy-2.4%2B-blue)](https://www.haproxy.org/)
 [![Tests](https://github.com/ailocal/openai-proxy/actions/workflows/test.yml/badge.svg)](https://github.com/ailocal/openai-proxy/actions/workflows/test.yml)
 
-Portable HTTP proxy for routing select OpenAI API paths to alternative endpoints.
+A simple HAProxy configuration for routing OpenAI API requests to alternative endpoints.
 
 Use unmodified tools (like [Aider](https://aider.chat])) with self-hosted services such as:
 
@@ -194,46 +194,27 @@ This project is licensed under the MIT License.
 
 ## Installation
 
-You can install openai-proxy either as a system service or user service:
-
-### Quick Install
-
+1. Install HAProxy:
 ```bash
-# Install using make (defaults to user installation)
-make install
+# Debian/Ubuntu
+sudo apt install haproxy
 
-# For system-wide installation (requires root)
-sudo make install ARGS="--system"
+# Fedora/RHEL
+sudo dnf install haproxy
+
+# macOS
+brew install haproxy
 ```
 
-Or install manually using one of these methods:
-
-### User Service (Recommended for development)
-
+2. Copy the configuration:
 ```bash
-# Install as user service
-bin/openai-proxy-install --user
-
-# Start the service
-systemctl --user enable openai-proxy
-systemctl --user start openai-proxy
-
-# Check status
-systemctl --user status openai-proxy
+sudo mkdir -p /etc/haproxy/conf.d
+sudo cp config/haproxy/conf.d/openai-proxy.cfg /etc/haproxy/conf.d/
 ```
 
-### System Service (For production/servers)
-
+3. Start HAProxy:
 ```bash
-# Install as system service (requires root)
-sudo bin/openai-proxy-install --system
-
-# Start the service
-sudo systemctl enable openai-proxy
-sudo systemctl start openai-proxy
-
-# Check status
-sudo systemctl status openai-proxy
+sudo systemctl restart haproxy
 ```
 
 ## See Also
