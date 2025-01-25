@@ -33,6 +33,9 @@ function start_haproxy() {
     mkdir -p "$TEST_CONFIG_DIR"
     cp "${PROJECT_ROOT}/config/haproxy/conf.d/openai-proxy.cfg" "$TEST_CONFIG_FILE"
     
+    # Update the port in the test config to use OPENAI_PROXY_PORT
+    sed -i "s/bind 127.0.0.1:2020/bind 127.0.0.1:${OPENAI_PROXY_PORT}/" "$TEST_CONFIG_FILE"
+    
     # Start HAProxy with test configuration
     # Added -W for master-worker mode to support socket
     haproxy -W -f "$TEST_CONFIG_FILE" -p "$TEST_PID_FILE" -S "$TEST_SOCKET_FILE" -D
