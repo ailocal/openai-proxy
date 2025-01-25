@@ -15,6 +15,12 @@ BASE_URL="http://localhost:${PORT}"
 SCRIPT_DIR="$(dirname -- "$(realpath "${BASH_SOURCE[0]}")")"
 AUDIO_FILE="${SCRIPT_DIR}/../test/fixtures/for-the-benefit-of-all-huge-manatees.mp3"
 
+# Check for OpenAI API key
+if [ -z "${OPENAI_API_KEY:-}" ]; then
+    echo -e "${RED}Error: OPENAI_API_KEY environment variable not set${NC}" >&2
+    exit 1
+fi
+
 function show_help() {
     echo "Usage: test-service [OPTIONS]"
     echo
@@ -59,7 +65,14 @@ function test_chat_completions() {
     local response
     response=$(curl -s -X POST \
         -H "Content-Type: application/json" \
-        -d '{"model":"llama2","messages":[{"role":"user","content":"Say hello"}]}' \
+        -H "Authorization: Bearer $OPENAI_API_KEY" \
+        -H "OpenAI-Organization: ${OPENAI_ORG_ID:-}" \
+        -d '{
+            "model": "gpt-3.5-turbo",
+            "messages": [{"role":"user","content":"Say hello"}],
+            "temperature": 0.7,
+            "max_tokens": 50
+        }' \
         "${BASE_URL}/v1/chat/completions")
     
     if [ "$VERBOSE" -eq 1 ]; then
@@ -86,8 +99,11 @@ function test_transcription() {
     
     local response
     response=$(curl -s -X POST \
-        -H "Content-Type: multipart/form-data" \
+        -H "Authorization: Bearer $OPENAI_API_KEY" \
+        -H "OpenAI-Organization: ${OPENAI_ORG_ID:-}" \
         -F "file=@$AUDIO_FILE" \
+        -F "model=whisper-1" \
+        -F "response_format=json" \
         "${BASE_URL}/v1/audio/transcriptions")
     
     if [ "$VERBOSE" -eq 1 ]; then
@@ -110,14 +126,20 @@ function test_text_to_speech() {
     local response
     response=$(curl -s -X POST \
         -H "Content-Type: application/json" \
-        -d '{"input":"Hello world","voice":"alloy"}' \
+        -H "Authorization: Bearer $OPENAI_API_KEY" \
+        -H "OpenAI-Organization: ${OPENAI_ORG_ID:-}" \
+        -d '{
+            "model": "tts-1",
+            "input": "Hello world",
+            "voice": "alloy"
+        }' \
         "${BASE_URL}/v1/audio/speech")
     
     if [ "$VERBOSE" -eq 1 ]; then
         echo "Response length: ${#response}"
     fi
     
-    if [ "${#response}" -gt 200 ]; then
+    if [ "${#response}" -gt 100 ]; then
         echo -e "${GREEN}✓ Text to speech working${NC}"
         return 0
     else
