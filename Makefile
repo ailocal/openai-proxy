@@ -4,4 +4,4 @@ test:
 	bats -r test/synthetic
 
 install:
-    install.sh
+	./install.sh
