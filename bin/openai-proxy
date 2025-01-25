@@ -196,16 +196,23 @@ function stop_command() {
         for pid in $pids; do
             kill "$pid" 2>/dev/null || true
         done
-        # Wait for all processes to stop
-        for pid in $pids; do
-            while kill -0 "$pid" 2>/dev/null; do
-                sleep 1
-            done
+        # Wait for all processes to stop with timeout
+        local timeout=10
+        local count=0
+        while [ $count -lt $timeout ]; do
+            pids=$(get_pid)
+            if [ -z "$pids" ]; then
+                echo "Stopped"
+                return 0
+            fi
+            sleep 1
+            count=$((count + 1))
         done
-        echo "Stopped"
+        echo -e "${RED}Failed to stop all processes after $timeout seconds${NC}"
+        return 1
     else
         echo "openai-proxy is not running"
-        return 1
+        return 0  # Changed to return 0 since this isn't really an error
     fi
 }
 
@@ -230,6 +237,14 @@ function start_command() {
         haproxy -f "$CONFIG" -d
     else
         haproxy -f "$CONFIG"
+    fi
+
+    # Wait briefly and verify process started
+    sleep 1
+    pid=$(get_pid)
+    if [ -z "$pid" ]; then
+        echo -e "${RED}Failed to start openai-proxy${NC}"
+        return 1
     fi
 
     echo -e "\n${GREEN}OpenAI Proxy started successfully${NC}\n"
