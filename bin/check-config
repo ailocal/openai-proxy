@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -o nounset -o pipefail -o errexit
+
+# Color constants
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+# Default config path
+CONFIG_PATH="/etc/haproxy/conf.d/openai-proxy.cfg"
+
+function show_help() {
+    echo "Usage: check-config [OPTIONS] [CONFIG_PATH]"
+    echo
+    echo "Check HAProxy configuration syntax"
+    echo
+    echo "Options:"
+    echo "  -h, --help     Show this help message and exit"
+    echo "  -v, --verbose  Show detailed output"
+    echo
+    echo "Default config path: $CONFIG_PATH"
+}
+
+# Process command line arguments
+VERBOSE=0
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -v|--verbose)
+            VERBOSE=1
+            shift
+            ;;
+        *)
+            if [ -f "$1" ]; then
+                CONFIG_PATH="$1"
+            else
+                echo -e "${RED}Error: Config file not found: $1${NC}" >&2
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Check if haproxy is installed
+if ! command -v haproxy &> /dev/null; then
+    echo -e "${RED}Error: haproxy is not installed${NC}" >&2
+    exit 1
+fi
+
+# Check if config file exists
+if [ ! -f "$CONFIG_PATH" ]; then
+    echo -e "${RED}Error: Config file not found: $CONFIG_PATH${NC}" >&2
+    exit 1
+fi
+
+echo -e "${YELLOW}Checking HAProxy configuration: $CONFIG_PATH${NC}"
+
+# Run the check
+if [ "$VERBOSE" -eq 1 ]; then
+    if haproxy -c -V -f "$CONFIG_PATH"; then
+        echo -e "${GREEN}Configuration is valid${NC}"
+        exit 0
+    else
+        echo -e "${RED}Configuration check failed${NC}"
+        exit 1
+    fi
+else
+    if haproxy -c -q -f "$CONFIG_PATH"; then
+        echo -e "${GREEN}Configuration is valid${NC}"
+        exit 0
+    else
+        echo -e "${RED}Configuration check failed${NC}"
+        exit 1
+    fi
+fi
