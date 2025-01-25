@@ -5,6 +5,8 @@ load ../test_helper
 # Add E2E specific setup
 setup() {
     echo "Using proxy at: $PROXY" >&2
+    echo "Test socket: $OPENAI_PROXY_SOCKET" >&2
+    echo "Test port: $OPENAI_PROXY_PORT" >&2
     
     # Load E2E specific configuration if present
     if [ -f "$E2E_ENV_FILE" ]; then
