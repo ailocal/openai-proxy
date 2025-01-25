@@ -137,17 +137,24 @@ backend backend_openai
 
 ## Testing Plan
 
-1. **Configuration Tests**
+1. **Test Environment**
+   - Tests run with isolated HAProxy instance
+   - Separate from system HAProxy service
+   - No sudo required for testing
+   - Safe for CI/CD environments
+
+2. **Configuration Tests**
    - Validate HAProxy syntax
    - Test with default OpenAI backend
    - Test with each local service option
 
-2. **E2E Tests**
+3. **E2E Tests**
    - Maintain existing test scenarios:
      - Chat completions with Ollama
      - Audio transcription with Whisper
      - Text to speech with local service
    - Add new tests for configuration validation
+   - Run against test HAProxy instance
 
 ## Migration Guide for Users
 

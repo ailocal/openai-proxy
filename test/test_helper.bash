@@ -1,4 +1,12 @@
 # Common test helper functions for openai-proxy tests
+#
+# This file sets up an isolated HAProxy instance for testing, separate from
+# the system HAProxy service. This approach:
+# - Allows tests to run without sudo
+# - Prevents interference with production traffic
+# - Enables testing on different ports/sockets
+# - Works safely in CI/CD environments
+# - Keeps test environment isolated and reproducible
 
 # Ensure realpath is available
 command -v realpath &> /dev/null || {
@@ -10,7 +18,8 @@ command -v realpath &> /dev/null || {
 TEST_HELPER_DIR="$(dirname -- "$(realpath "${BASH_SOURCE[0]}")")"
 PROJECT_ROOT="$(realpath "${TEST_HELPER_DIR}/..")"
 
-# Set up test configuration paths
+# Set up isolated test configuration paths
+# Using process ID ($$) to ensure unique test instance
 export TEST_CONFIG_DIR="/tmp/haproxy-test-$$"
 export TEST_CONFIG_FILE="${TEST_CONFIG_DIR}/haproxy.cfg"
 export TEST_SOCKET_FILE="${TEST_CONFIG_DIR}/haproxy.sock"
