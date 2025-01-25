@@ -1,7 +1,7 @@
 .PHONY: test install
 
 test:
-	bats -r test/
+	bats -r test/synthetic
 
 install:
-	bin/openai-proxy-install $(ARGS)
+    install.sh
