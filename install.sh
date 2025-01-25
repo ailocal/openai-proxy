@@ -36,8 +36,15 @@ need_sudo() {
 check_sudo_requirement() {
     if need_sudo "/etc/haproxy" || need_sudo "/etc/haproxy/conf.d"; then
         echo -e "${YELLOW}Some operations require sudo access.${NC}"
-        # Cache sudo credentials
-        sudo -v
+        # Test sudo access without password if possible
+        if ! sudo -n true 2>/dev/null; then
+            # If sudo needs password, explain why
+            echo -e "${YELLOW}Sudo access is needed to:${NC}"
+            echo " - Create/modify files in /etc/haproxy"
+            echo " - Restart the HAProxy service"
+            # Actually run sudo to prompt for password
+            sudo true
+        fi
     fi
 }
 
