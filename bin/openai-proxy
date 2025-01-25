@@ -1,7 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -o nounset -o pipefail -o errexit
-
-# openai-proxy - Use custom routes for OpenAI API endpoints
 
 # Color constants
 RED='\033[0;31m'
@@ -9,457 +7,746 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
-BOLD='\033[1m'
 
-command -v realpath &> /dev/null || {
-  echo "Error: 'realpath' is required but not found. Please install 'coreutils' (e.g. 'brew install coreutils' on macOS)." >&2
-  exit 1
-}
-SCRIPT_DIR="$(dirname -- "$(realpath "${BASH_SOURCE[0]}")")"
-export PATH="$SCRIPT_DIR:$PATH"
+# Get the real path of the script, following symlinks
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# Socket handling functions
-function get_socket_path() {
-    # Check if running as root/sudo
-    if [ "$EUID" -eq 0 ]; then
-        # System-wide location when running as root
-        echo "/var/run/openai-proxy/haproxy.sock"
-    else
-        # User-specific location
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            # macOS: Use user's Library directory
-            echo "$HOME/Library/Application Support/openai-proxy/haproxy.sock"
-        else
-            # Linux/Unix: Use XDG_RUNTIME_DIR if available, fall back to /tmp
-            local runtime_dir="${XDG_RUNTIME_DIR:-/tmp}/openai-proxy"
-            echo "$runtime_dir/haproxy.sock"
-        fi
+# Ensure we're in the project root when running container commands
+function ensure_project_root() {
+    if ! cd "$PROJECT_ROOT"; then
+        echo -e "${RED}Error: Could not change to project root directory: $PROJECT_ROOT${NC}" >&2
+        exit 1
     fi
 }
 
-function prepare_socket_directory() {
-    local socket_path
-    socket_path=$(dirname "$(get_socket_path)")
+# Config paths
+DEFAULT_CONFIG_PATH="/etc/haproxy/conf.d/openai-proxy.cfg"
+EXAMPLE_CONFIG_PATH="config/haproxy/conf.d/openai-proxy.cfg-example"
+
+function check_native_deps() {
+    local missing_deps=()
     
-    if [ ! -d "$socket_path" ]; then
-        mkdir -p "$socket_path"
-        # Set appropriate permissions
-        if [ "$EUID" -eq 0 ]; then
-            chmod 755 "$socket_path"
+    # Check for haproxy
+    if ! command -v haproxy >/dev/null 2>&1; then
+        missing_deps+=("haproxy")
+    fi
+    
+    if [ ${#missing_deps[@]} -ne 0 ]; then
+        echo -e "${YELLOW}Missing dependencies for native mode: ${missing_deps[*]}${NC}"
+        echo -ne "${BLUE}Would you like to install them? [Y/n] ${NC}"
+        read -r response
+        
+        case "$response" in
+            [nN][oO]|[nN])
+                echo -e "${RED}Dependencies required to continue${NC}"
+                exit 1
+                ;;
+            *)
+                # Try to detect package manager and install
+                if command -v apt-get >/dev/null 2>&1; then
+                    sudo apt-get update && sudo apt-get install -y "${missing_deps[@]}"
+                elif command -v dnf >/dev/null 2>&1; then
+                    sudo dnf install -y "${missing_deps[@]}"
+                elif command -v brew >/dev/null 2>&1; then
+                    brew install "${missing_deps[@]}"
+                else
+                    echo -e "${RED}Could not detect package manager. Please install manually: ${missing_deps[*]}${NC}"
+                    exit 1
+                fi
+                ;;
+        esac
+    fi
+}
+
+function check_container_deps() {
+    local missing_deps=()
+    
+    # Check for podman and podman-compose
+    if ! command -v podman >/dev/null 2>&1; then
+        missing_deps+=("podman")
+    fi
+    if ! command -v podman-compose >/dev/null 2>&1; then
+        missing_deps+=("podman-compose")
+    fi
+    
+    if [ ${#missing_deps[@]} -ne 0 ]; then
+        echo -e "${YELLOW}Missing dependencies for container mode: ${missing_deps[*]}${NC}"
+        echo -ne "${BLUE}Would you like to install them? [Y/n] ${NC}"
+        read -r response
+        
+        case "$response" in
+            [nN][oO]|[nN])
+                echo -e "${RED}Dependencies required to continue${NC}"
+                exit 1
+                ;;
+            *)
+                # Try to detect package manager and install
+                if command -v apt-get >/dev/null 2>&1; then
+                    sudo apt-get update && sudo apt-get install -y "${missing_deps[@]}"
+                elif command -v dnf >/dev/null 2>&1; then
+                    sudo dnf install -y "${missing_deps[@]}"
+                elif command -v brew >/dev/null 2>&1; then
+                    brew install "${missing_deps[@]}"
+                else
+                    echo -e "${RED}Could not detect package manager. Please install manually: ${missing_deps[*]}${NC}"
+                    exit 1
+                fi
+                ;;
+        esac
+    fi
+}
+
+function ensure_config() {
+    local config_path="$1"
+    
+    # Check if config exists
+    if [ ! -f "$config_path" ]; then
+        echo -e "${YELLOW}Config file not found: $config_path${NC}"
+        
+        # Check if example config exists
+        if [ -f "$EXAMPLE_CONFIG_PATH" ]; then
+            echo -ne "${BLUE}Would you like to copy the example config? [Y/n] ${NC}"
+            read -r response
+            
+            case "$response" in
+                [nN][oO]|[nN])
+                    echo -e "${RED}Config file required to continue${NC}"
+                    exit 1
+                    ;;
+                *)
+                    # Create directory if it doesn't exist
+                    mkdir -p "$(dirname "$config_path")"
+                    
+                    # Copy example config
+                    cp "$EXAMPLE_CONFIG_PATH" "$config_path"
+                    echo -e "${GREEN}Copied example config to: $config_path${NC}"
+                    ;;
+            esac
         else
-            chmod 700 "$socket_path"
+            echo -e "${RED}Error: Example config not found: $EXAMPLE_CONFIG_PATH${NC}"
+            exit 1
         fi
     fi
 }
 
-# Default environment variables
-PORT=${PORT:-2020}
-TEMPLATE=${TEMPLATE:-${SCRIPT_DIR}/../config/haproxy/openai-proxy.cfg.template}
-CONFIG=${CONFIG:-${SCRIPT_DIR}/../config/haproxy/openai-proxy.cfg}
-ENV_FILE=${ENV_FILE:-${SCRIPT_DIR}/../config/env}
-ERROR_PAGE=${ERROR_PAGE:-${SCRIPT_DIR}/../config/haproxy/errors/503.http}
-SOCKET=${SOCKET:-$(get_socket_path)}
-
-# Function to display help
 function show_help() {
-    echo "Usage: openai-proxy [COMMAND] [OPTIONS]"
-    echo ""
+    echo "Usage: openai-proxy <command> [options]"
+    echo
     echo "Commands:"
-    echo "  start    Start the proxy (default if no command specified)"
-    echo "  stop     Stop the proxy"
-    echo "  restart  Stop and then start the proxy"
-    echo "  reload   Reload the configuration without stopping"
-    echo "  status   Show proxy status"
-    echo ""
-    echo "Options:"
-    echo "  -h, --help            Show this help message and exit"
-    echo "  -v, --version         Show version information and exit"
-    echo "  -b, --bind ADDRESS    Specify the IP address to bind to (default: 127.0.0.1)"
-    echo "  -p, --port PORT       Specify the port to listen on (default: 2020)"
-    echo "  -c, --config FILE     Specify the config file path"
-    echo "      --verbose         Enable verbose output"
-    echo "      --debug           Enable debug output"
+    echo "  check-config        Check HAProxy configuration syntax"
+    echo "  check-endpoints     Test the OpenAI API endpoints"
+    echo
+    echo "  start              Start HAProxy directly on the host"
+    echo "  stop               Stop HAProxy on the host" 
+    echo "  status             Show HAProxy status on the host"
+    echo
+    echo "  start-container    Start the proxy container"
+    echo "  stop-container     Stop the proxy container"
+    echo "  status-container   Show proxy container status"
+    echo "  enable-container   Enable container auto-start with system"
+    echo "  disable-container  Disable container auto-start with system"
+    echo
+    echo "Global Options:"
+    echo "  -h, --help     Show this help message"
+    echo "  -v, --verbose  Show detailed output"
 }
 
-function show_version() {
-    echo "openai-proxy version 1.0.0"
-}
-
-function check_dependencies() {
-    local deps=("$@")
-    local missing=0
-    
-    for dep in "${deps[@]}"; do
-        if ! command -v "$dep" &> /dev/null; then
-            echo "Error: $dep is not installed."
-            echo "Please install $dep and try again."
-            missing=1
-        fi
-    done
-    
-    [ $missing -eq 1 ] && exit 1
-    return 0
-}
-
-function get_pid() {
-    # Return all PIDs as a space-separated list
-    pgrep -f "haproxy.*$CONFIG" | tr '\n' ' ' || true
-}
-
-function get_backend_status() {
-    local backend=$1
-    if [ -S "${SOCKET}" ]; then
-        local status=$(echo "show stat" | socat "${SOCKET}" stdio | grep "${backend}" | grep 'BACKEND' | cut -d',' -f18)
-        if [ "$status" = "UP" ]; then
-            echo -e "${GREEN}●${NC} UP"
-        elif [ "$status" = "DOWN" ]; then
-            echo -e "${RED}●${NC} DOWN"
-        else
-            echo -e "${YELLOW}●${NC} UNKNOWN"
-        fi
-    else
-        echo -e "${YELLOW}●${NC} NO STATS (socket not found)"
-    fi
-}
-
-function show_routing_table() {
-    echo -e "${BOLD}OpenAI API Routing Table${NC}\n"
-
-    # Audio Transcriptions
-    printf "%s %-30s ${BLUE}%-40s${NC}\n" \
-        "$(get_backend_status "backend_audio_transcriptions")" \
-        "/v1/audio/transcriptions" \
-        "$BACKEND_AUDIO_TRANSCRIPTIONS"
-
-    # Chat Completions
-    printf "%s %-30s ${BLUE}%-40s${NC}\n" \
-        "$(get_backend_status "backend_chat_completions")" \
-        "/v1/chat/completions" \
-        "$BACKEND_CHAT_COMPLETIONS"
-
-    # Text to Speech
-    printf "%s %-30s ${BLUE}%-40s${NC}\n" \
-        "$(get_backend_status "backend_audio_speech")" \
-        "/v1/audio/speech" \
-        "$BACKEND_AUDIO_SPEECH"
-
-    echo -e "\n${BOLD}OpenAI API Backend:${NC} ${BLUE}${BACKEND_OPENAI}${NC}"
-    echo -e "\nListening on: ${GREEN}http://0.0.0.0:${PORT}${NC}"
-}
-
-function reload_command() {
-    local pids
-    pids=$(get_pid)
-    if [ -n "$pids" ]; then
-        generate_haproxy_config
-        echo -e "${YELLOW}Reloading openai-proxy configuration...${NC}"
-        # Convert space-separated PIDs into -sf pid1 -sf pid2 format
-        local sf_args=""
-        for pid in $pids; do
-            sf_args="$sf_args -sf $pid"
-        done
-        haproxy -f "$CONFIG" $sf_args
-        echo -e "${GREEN}Configuration reloaded${NC}"
-        show_routing_table
-    else
-        echo -e "${RED}openai-proxy is not running${NC}"
-        return 1
-    fi
-}
-
-function restart_command() {
-    stop_command
-    sleep 1
-    # Generate new config before starting
-    generate_haproxy_config
-    start_command
-}
-
-function status_command() {
-    local pid
-    pid=$(get_pid)
-    if [ -n "$pid" ]; then
-        echo -e "${GREEN}openai-proxy is running (PID: $pid)${NC}\n"
-        show_routing_table
-        return 0
-    else
-        echo -e "${RED}openai-proxy is not running${NC}"
-        return 1
-    fi
-}
-
-function stop_command() {
-    local pids
-    pids=$(get_pid)
-    if [ -n "$pids" ]; then
-        echo "Stopping openai-proxy (PIDs: $pids)..."
-        for pid in $pids; do
-            kill "$pid" 2>/dev/null || true
-        done
-        # Wait for all processes to stop
-        for pid in $pids; do
-            while kill -0 "$pid" 2>/dev/null; do
-                sleep 1
-            done
-        done
-        echo "Stopped"
-    else
-        echo "openai-proxy is not running"
-        return 1
-    fi
-}
-
-function start_command() {
-    # Check if already running
-    local pid
-    pid=$(get_pid)
-    if [ -n "$pid" ]; then
-        echo -e "${RED}openai-proxy is already running (PID: $pid)${NC}"
-        return 1
-    fi
-
-    # Ensure socket directory exists
-    prepare_socket_directory
-
-    # Generate the config
-    generate_haproxy_config
-
-    # Start HAProxy
-    echo "Starting openai-proxy..."
-    if [ "$DEBUG" -eq 1 ]; then
-        haproxy -f "$CONFIG" -d
-    else
-        haproxy -f "$CONFIG"
-    fi
-
-    echo -e "\n${GREEN}OpenAI Proxy started successfully${NC}\n"
-    show_routing_table
-}
-
-function get_backend_names() {
-    # Extract all backend names from the template file
-    grep "^backend backend_" "$TEMPLATE" | \
-    sed 's/^backend backend_//' | \
-    tr '\n' ' '
-}
-
-# Parse a backend URL into component parts
-function parse_backend_url() {
-    local var_prefix="$1"      # e.g. BACKEND_DEFAULT
-    local env_var="${var_prefix}"  # Construct the full env var name
-    
-    # Use eval to get the URL value since we're dealing with dynamic variable names
-    local url
-    eval "url=\${$env_var}"
-    
-    # Extract protocol, host, port
-    if [[ "$url" =~ ^(https?)://([^:/]+)(:([0-9]+))? ]]; then
-        local proto="${BASH_REMATCH[1]}"
-        local host="${BASH_REMATCH[2]}"
-        local port="${BASH_REMATCH[4]}"
-        
-        # Set default ports if not specified
-        [[ -z "$port" ]] && port=$([ "$proto" = "https" ] && echo "443" || echo "80")
-        
-        # Export parsed components
-        export "${var_prefix}_HOST"="$host"
-        export "${var_prefix}_PORT"="$port"
-        export "${var_prefix}_SSL"="$([ "$proto" = "https" ] && echo "1" || echo "0")"
-    fi
-}
-
-function prepare_backend_variables() {
-    # Get backend names dynamically from template
-    local backend_names
-    backend_names=$(get_backend_names)
-    
-    # Process each backend
-    for name in $backend_names; do
-        local backend="BACKEND_${name^^}"
-        parse_backend_url "$backend"
-        
-        # Create the SSL config string if SSL is enabled
-        local ssl_var="${backend}_SSL"
-        if [ "${!ssl_var}" = "1" ]; then
-            local host_var="${backend}_HOST"
-            export "${backend}_SSL_CONFIG=ssl verify none sni str(${!host_var})"
-        else
-            export "${backend}_SSL_CONFIG="
-        fi
-    done
-}
-
-function generate_haproxy_config() {
-    # Set logging variables based on debug mode
-    if [ "$DEBUG" -eq 1 ]; then
-        export LOG_LEVEL="debug"
-        export HAPROXY_LOG_CONFIG='log-format "%ci:%cp [%tr] %ft %b/%s %TR/%Tw/%Tc/%Tr/%Ta %ST %B %CC %CS %tsc %ac/%fc/%bc/%sc/%rc %sq/%bq %hr %hs %{+Q}r"'
-    else
-        export LOG_LEVEL="notice"
-        export HAPROXY_LOG_CONFIG="option httplog"
-    fi
-
-    # Parse backend URLs into component variables
-    prepare_backend_variables
-
-    # Export variables needed by envsubst
-    export PORT
-    export ERROR_PAGE
-    export SOCKET 
-
-    # Generate HAProxy configuration using envsubst
-    echo -e "${BLUE}Regenerating HAProxy configuration...${NC}"
-    envsubst < "$TEMPLATE" > "$CONFIG"
-
-    if [ "$VERBOSE" -eq 1 ]; then
-        echo "Generated configuration:"
-        cat "$CONFIG"
-    fi
-}
-
-
-function load_configuration() {
-    # Configuration values are loaded in order, with later sources taking precedence:
-    #
-    # 1. Default values (lowest precedence)
-    # 2. ENV file variables (if present)
-    # 3. Environment variables with OPENAI_PROXY_ prefix
-    # 4. Command line arguments (highest precedence, handled in main())
-
-    # Start with default values
-    PORT="2020"
-    BIND_IP="127.0.0.1"
-    BACKEND_AUDIO_TRANSCRIPTIONS="https://api.openai.com:443"
-    BACKEND_AUDIO_SPEECH="https://api.openai.com:443"
-    BACKEND_CHAT_COMPLETIONS="https://api.openai.com:443"
-    BACKEND_OPENAI="https://api.openai.com:443"
-    BACKEND_LOCAL="http://localhost"  # Local backend for static content
-    WELCOME_PAGE="$(realpath "${SCRIPT_DIR}/../config/haproxy/pages/welcome.http")"
-
-    # Load from ENV file if present (overrides defaults)
-    [ -f "$ENV_FILE" ] && source "$ENV_FILE"
-
-    # Override with environment variables if set
-    BACKEND_AUDIO_SPEECH="${OPENAI_PROXY_BACKEND_AUDIO_SPEECH:-$BACKEND_AUDIO_SPEECH}"
-    BACKEND_AUDIO_TRANSCRIPTIONS="${OPENAI_PROXY_BACKEND_AUDIO_TRANSCRIPTIONS:-$BACKEND_AUDIO_TRANSCRIPTIONS}"
-    BACKEND_CHAT_COMPLETIONS="${OPENAI_PROXY_BACKEND_CHAT_COMPLETIONS:-$BACKEND_CHAT_COMPLETIONS}"
-    BACKEND_OPENAI="${OPENAI_PROXY_BACKEND_OPENAI:-$BACKEND_OPENAI}"
-    BIND_IP="${OPENAI_PROXY_BIND_IP:-$BIND_IP}"
-    PORT="${OPENAI_PROXY_PORT:-$PORT}"
-
-    # Export all variables for use in templates and rest of script
-    export BACKEND_AUDIO_SPEECH
-    export BACKEND_AUDIO_TRANSCRIPTIONS
-    export BACKEND_CHAT_COMPLETIONS
-    export BACKEND_OPENAI
-    export BACKEND_LOCAL
-    export BIND_IP
-    export PORT
-    export WELCOME_PAGE
-}
-
-function process_arguments() {
-    export VERBOSE=0
-    export DEBUG=0
-    export COMMAND="start"
+function config_check() {
+    local verbose=0
+    local config_path="$DEFAULT_CONFIG_PATH"
 
     while [[ $# -gt 0 ]]; do
         case $1 in
-            start|stop|status|reload|restart)
-            export COMMAND="$1"
-            shift
-            ;;
-            -b|--bind)
-            if [[ -z "$2" || "$2" == -* ]]; then
-                echo "Error: --bind requires an IP address argument" >&2
-                exit 1
-            fi
-            export BIND_IP="$2"
-            shift
-            shift
-            ;;
-            -p|--port)
-            if [[ -z "$2" || "$2" == -* ]]; then
-                echo "Error: --port requires a port number argument" >&2
-                exit 1
-            fi
-            if ! [[ "$2" =~ ^[0-9]+$ ]] || [ "$2" -lt 1 ] || [ "$2" -gt 65535 ]; then
-                echo "Error: port must be a number between 1 and 65535" >&2
-                exit 1
-            fi
-            export PORT="$2"
-            shift
-            shift
-            ;;
+            -v|--verbose)
+                verbose=1
+                shift
+                ;;
             -h|--help)
-            show_help
-            exit 0
-            ;;
-            -v|--version)
-            show_version
-            exit 0
-            ;;
-            -c|--config)
-            if [[ -z "$2" || "$2" == -* ]]; then
-                echo "Error: --config requires a file argument" >&2
-                exit 1
-            fi
-            export ENV_FILE="$2"
-            shift
-            shift
-            ;;
-            --verbose)
-            export VERBOSE=1
-            shift
-            ;;
-            --debug)
-            export DEBUG=1
-            shift
-            ;;
+                echo "Usage: openai-proxy config-check [OPTIONS] [CONFIG_PATH]"
+                echo
+                echo "Check HAProxy configuration syntax"
+                echo
+                echo "Options:"
+                echo "  -h, --help     Show this help message"
+                echo "  -v, --verbose  Show detailed output"
+                echo
+                echo "Default config path: $config_path"
+                exit 0
+                ;;
             *)
-            echo "Unknown option: $1" >&2
-            show_help
-            exit 1
-            ;;
+                if [ -f "$1" ]; then
+                    config_path="$1"
+                else
+                    echo -e "${RED}Error: Config file not found: $1${NC}" >&2
+                    exit 1
+                fi
+                shift
+                ;;
         esac
     done
 
-}
+    # Check if haproxy is installed
+    if ! command -v haproxy &> /dev/null; then
+        echo -e "${RED}Error: haproxy is not installed${NC}" >&2
+        exit 1
+    fi
 
-function main() {
-    # Load configuration from env file and set defaults
-    load_configuration
+    # Ensure config file exists
+    ensure_config "$config_path"
 
-    # Check for required dependencies
-    check_dependencies haproxy envsubst socat
+    echo -e "${YELLOW}Checking HAProxy configuration: $config_path${NC}"
 
-    # Process command line arguments
-    process_arguments "$@"
-
-    # Execute the requested command
-    case "$COMMAND" in
-        start)
-            start_command
-            ;;
-        stop)
-            stop_command
-            ;;
-        restart)
-            restart_command
-            ;;
-        reload)
-            reload_command
-            ;;
-        status)
-            status_command
-            ;;
-        *)
-            echo "Unknown command: $COMMAND"
-            show_help
+    if [ "$verbose" -eq 1 ]; then
+        if haproxy -c -V -f "$config_path"; then
+            echo -e "${GREEN}Configuration is valid${NC}"
+            exit 0
+        else
+            echo -e "${RED}Configuration check failed${NC}"
             exit 1
-            ;;
-    esac
+        fi
+    else
+        if haproxy -c -q -f "$config_path"; then
+            echo -e "${GREEN}Configuration is valid${NC}"
+            exit 0
+        else
+            echo -e "${RED}Configuration check failed${NC}"
+            exit 1
+        fi
+    fi
 }
 
-# Call main with all script arguments
-main "$@"
+function endpoints_check() {
+    local verbose=0
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -v|--verbose)
+                verbose=1
+                shift
+                ;;
+            -h|--help)
+                echo "Usage: openai-proxy endpoints-check [OPTIONS]"
+                echo
+                echo "Test OpenAI API endpoints"
+                echo
+                echo "Options:"
+                echo "  -h, --help     Show this help message"
+                echo "  -v, --verbose  Show detailed output"
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Usage: openai-proxy endpoints-check [-v|--verbose]"
+                exit 1
+                ;;
+        esac
+    done
+
+    # Check if OPENAI_API_KEY is set
+    if [ -z "${OPENAI_API_KEY:-}" ]; then
+        echo -e "${RED}Error: OPENAI_API_KEY environment variable is not set${NC}"
+        exit 1
+    fi
+
+    echo -e "${YELLOW}Testing OpenAI Proxy endpoints...${NC}"
+
+    # Function to run curl with conditional verbose output
+    run_curl_test() {
+        local output
+        local status
+        
+        if [ "$verbose" -eq 1 ]; then
+            "$@"
+            status=$?
+        else
+            output=$("$@" 2>&1)
+            status=$?
+            if [ $status -ne 0 ]; then
+                echo -e "${RED}Error response:${NC}"
+                echo "$output"
+            fi
+        fi
+        return $status
+    }
+
+    # Test endpoints
+    echo -e "\n${YELLOW}1. Testing /v1/audio/transcriptions...${NC}"
+    if [ "$verbose" -eq 1 ]; then
+        if run_curl_test curl -v -X POST \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -H "Content-Type: multipart/form-data" \
+            -F file="@test/fixtures/huge-manatees.mp3" \
+            -F model="whisper-1" \
+            http://localhost:2020/v1/audio/transcriptions; then
+            echo -e "${GREEN}✓ Audio transcription endpoint working${NC}"
+        else
+            echo -e "${RED}✗ Audio transcription failed${NC}"
+        fi
+    else
+        if output=$(curl -s -X POST \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -H "Content-Type: multipart/form-data" \
+            -F file="@test/fixtures/huge-manatees.mp3" \
+            -F model="whisper-1" \
+            http://localhost:2020/v1/audio/transcriptions); then
+            echo -e "${GREEN}✓ Audio transcription endpoint working${NC}"
+            echo -e "Response: ${YELLOW}$output${NC}"
+        else
+            echo -e "${RED}✗ Audio transcription failed${NC}"
+        fi
+    fi
+
+    echo -e "\n${YELLOW}2. Testing /v1/chat/completions...${NC}"
+    if run_curl_test curl ${verbose:+-v} -X POST \
+        -H "Authorization: Bearer $OPENAI_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+            "model": "gpt-3.5-turbo",
+            "messages": [{"role": "user", "content": "Say hello!"}]
+        }' \
+        http://localhost:2020/v1/chat/completions; then
+        echo -e "${GREEN}✓ Chat completions endpoint working${NC}"
+    else
+        echo -e "${RED}✗ Chat completions failed${NC}"
+    fi
+
+    echo -e "\n${YELLOW}3. Testing /v1/audio/speech...${NC}"
+    if run_curl_test curl ${verbose:+-v} -X POST \
+        -H "Authorization: Bearer $OPENAI_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+            "model": "tts-1",
+            "input": "Hello world!",
+            "voice": "alloy"
+        }' \
+        http://localhost:2020/v1/audio/speech -o test.mp3; then
+        echo -e "${GREEN}✓ Audio speech endpoint working${NC}"
+    else
+        echo -e "${RED}✗ Audio speech failed${NC}"
+    fi
+
+    # Clean up
+    rm -f test.mp3
+
+    echo -e "\n${GREEN}Verification complete!${NC}"
+}
+
+function start() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                echo "Usage: openai-proxy start [OPTIONS]"
+                echo
+                echo "Start HAProxy directly on the host"
+                echo
+                echo "Options:"
+                echo "  -h, --help  Show this help message"
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Usage: openai-proxy start"
+                exit 1
+                ;;
+        esac
+    done
+
+    # Check dependencies before starting
+    check_native_deps
+
+    # Check if already running
+    if pgrep -x haproxy >/dev/null; then
+        echo -e "${YELLOW}HAProxy is already running${NC}"
+        exit 0
+    fi
+
+    echo -e "${YELLOW}Starting HAProxy...${NC}"
+    # Ensure config exists and run HAProxy in foreground mode
+    ensure_config "$DEFAULT_CONFIG_PATH"
+    haproxy -f "$DEFAULT_CONFIG_PATH" -d
+    echo -e "${GREEN}HAProxy started${NC}"
+}
+
+function stop() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                echo "Usage: openai-proxy stop [OPTIONS]"
+                echo
+                echo "Stop HAProxy on the host"
+                echo
+                echo "Options:"
+                echo "  -h, --help  Show this help message"
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Usage: openai-proxy stop"
+                exit 1
+                ;;
+        esac
+    done
+
+    # Check dependencies before stopping
+    check_native_deps
+
+    echo -e "${YELLOW}Stopping HAProxy...${NC}"
+    if pgrep -x haproxy >/dev/null; then
+        pkill haproxy
+        echo -e "${GREEN}HAProxy stopped${NC}"
+    else
+        echo -e "${YELLOW}HAProxy is not running${NC}"
+    fi
+}
+
+function status() {
+    local verbose=0
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -v|--verbose)
+                verbose=1
+                shift
+                ;;
+            -h|--help)
+                echo "Usage: openai-proxy status [OPTIONS]"
+                echo
+                echo "Show status of all HAProxy instances"
+                echo
+                echo "Options:"
+                echo "  -h, --help     Show this help message"
+                echo "  -v, --verbose  Show detailed output"
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Usage: openai-proxy status"
+                exit 1
+                ;;
+        esac
+    done
+
+    # System HAProxy status
+    echo -e "${YELLOW}System HAProxy:${NC}"
+    if command -v systemctl >/dev/null 2>&1; then
+        local is_enabled=$(systemctl is-enabled haproxy 2>/dev/null)
+        local is_active=$(systemctl is-active haproxy 2>/dev/null)
+        
+        if [ "$verbose" -eq 1 ]; then
+            systemctl status haproxy || true
+        else
+            if [ "$is_enabled" = "enabled" ]; then
+                echo -e "  Service: ${GREEN}enabled${NC}"
+            else
+                echo -e "  Service: ${RED}disabled${NC}"
+            fi
+            
+            if [ "$is_active" = "active" ]; then
+                echo -e "  Status:  ${GREEN}running${NC}"
+            else
+                echo -e "  Status:  ${RED}not running${NC}"
+            fi
+        fi
+    elif command -v launchctl >/dev/null 2>&1; then
+        if [ "$verbose" -eq 1 ]; then
+            sudo launchctl list | grep haproxy || true
+        else
+            if sudo launchctl list | grep -q haproxy; then
+                echo -e "  Status: ${GREEN}running${NC}"
+            else
+                echo -e "  Status: ${RED}not running${NC}"
+            fi
+        fi
+    else
+        echo "  No system service manager found"
+    fi
+
+    # Container HAProxy status
+    echo -e "\n${YELLOW}Container HAProxy:${NC}"
+    if [ "$verbose" -eq 1 ]; then
+        podman-compose ps
+    else
+        if podman-compose ps 2>/dev/null | grep -q "openai-proxy"; then
+            local health=$(podman-compose ps | grep openai-proxy | grep -o '(.*)')
+            if [[ $health == "(healthy)" ]]; then
+                echo -e "  Status: ${GREEN}running (healthy)${NC}"
+            elif [[ $health == "(unhealthy)" ]]; then
+                echo -e "  Status: ${RED}running (unhealthy)${NC}"
+            else
+                echo -e "  Status: ${YELLOW}running${NC}"
+            fi
+        else
+            echo -e "  Status: ${RED}not running${NC}"
+        fi
+    fi
+
+    if [ "$verbose" -eq 0 ]; then
+        echo -e "\nTip: Use ${YELLOW}-v${NC} or ${YELLOW}--verbose${NC} for detailed status information"
+    fi
+}
+
+function start_container() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                echo "Usage: openai-proxy container-start [OPTIONS]"
+                echo
+                echo "Start the proxy container"
+                echo
+                echo "Options:"
+                echo "  -h, --help  Show this help message"
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Usage: openai-proxy container-start"
+                exit 1
+                ;;
+        esac
+    done
+
+    # Check dependencies before starting
+    check_container_deps
+    
+    # Ensure we're in the project root
+    ensure_project_root
+
+    echo -e "${YELLOW}Starting proxy container...${NC}"
+    podman-compose up -d
+    echo -e "${GREEN}Proxy container started${NC}"
+}
+
+function stop_container() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                echo "Usage: openai-proxy container-stop [OPTIONS]"
+                echo
+                echo "Stop the proxy container"
+                echo
+                echo "Options:"
+                echo "  -h, --help  Show this help message"
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Usage: openai-proxy container-stop"
+                exit 1
+                ;;
+        esac
+    done
+
+    # Check dependencies before stopping
+    check_container_deps
+    
+    # Ensure we're in the project root
+    ensure_project_root
+
+    echo -e "${YELLOW}Stopping proxy container...${NC}"
+    podman-compose down
+    echo -e "${GREEN}Proxy container stopped${NC}"
+}
+
+function status_container() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                echo "Usage: openai-proxy container-status [OPTIONS]"
+                echo
+                echo "Show proxy container status"
+                echo
+                echo "Options:"
+                echo "  -h, --help  Show this help message"
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Usage: openai-proxy container-status"
+                exit 1
+                ;;
+        esac
+    done
+
+    # Ensure we're in the project root
+    ensure_project_root
+
+    echo -e "${YELLOW}Container status:${NC}"
+    podman-compose ps
+}
+
+function enable_container() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                echo "Usage: openai-proxy enable-container [OPTIONS]"
+                echo
+                echo "Enable the proxy container to start automatically with the system"
+                echo
+                echo "Options:"
+                echo "  -h, --help  Show this help message"
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Usage: openai-proxy enable-container"
+                exit 1
+                ;;
+        esac
+    done
+
+    # Check dependencies
+    check_container_deps
+    
+    # Ensure we're in the project root
+    ensure_project_root
+
+    echo -e "${YELLOW}Enabling proxy container auto-start...${NC}"
+    
+    if command -v systemctl >/dev/null 2>&1; then
+        # Linux with systemd
+        # Create systemd user directory if it doesn't exist
+        mkdir -p ~/.config/systemd/user/
+
+        # Create the systemd service file
+        cat > ~/.config/systemd/user/openai-proxy.service << EOF
+[Unit]
+Description=OpenAI Proxy Container Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$(pwd)
+ExecStart=/usr/bin/podman-compose up
+ExecStop=/usr/bin/podman-compose down
+Restart=always
+
+[Install]
+WantedBy=default.target
+EOF
+
+        # Reload systemd user daemon
+        systemctl --user daemon-reload
+
+        # Enable and start the service
+        systemctl --user enable openai-proxy.service
+        systemctl --user start openai-proxy.service
+        
+        echo -e "${GREEN}Proxy container enabled to start automatically (systemd)${NC}"
+        echo -e "${YELLOW}Note: The service will start after you log in, as it's enabled in user mode${NC}"
+    elif command -v brew >/dev/null 2>&1; then
+        # macOS with brew services
+        mkdir -p "$HOME/.config/haproxy/conf.d"
+        ln -sf "$(pwd)/config/haproxy/conf.d/openai-proxy.cfg" "$HOME/.config/haproxy/conf.d/"
+        brew services start haproxy
+        echo -e "${GREEN}Proxy container enabled to start automatically (brew services)${NC}"
+    else
+        echo -e "${RED}Error: No supported service manager (systemd/brew) found${NC}"
+        exit 1
+    fi
+}
+
+function disable_container() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                echo "Usage: openai-proxy disable-container [OPTIONS]"
+                echo
+                echo "Disable automatic startup of the proxy container"
+                echo
+                echo "Options:"
+                echo "  -h, --help  Show this help message"
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Usage: openai-proxy disable-container"
+                exit 1
+                ;;
+        esac
+    done
+
+    # Check dependencies
+    check_container_deps
+    
+    # Ensure we're in the project root
+    ensure_project_root
+
+    echo -e "${YELLOW}Disabling proxy container auto-start...${NC}"
+    
+    if command -v systemctl >/dev/null 2>&1; then
+        # Linux with systemd
+        systemctl --user stop openai-proxy.service
+        systemctl --user disable openai-proxy.service
+        rm -f ~/.config/systemd/user/openai-proxy.service
+        systemctl --user daemon-reload
+        echo -e "${GREEN}Proxy container auto-start disabled (systemd)${NC}"
+    elif command -v brew >/dev/null 2>&1; then
+        # macOS with brew services
+        brew services stop haproxy
+        rm -f "$HOME/.config/haproxy/conf.d/openai-proxy.cfg"
+        echo -e "${GREEN}Proxy container auto-start disabled (brew services)${NC}"
+    else
+        echo -e "${RED}Error: No supported service manager (systemd/brew) found${NC}"
+        exit 1
+    fi
+}
+
+# Main command processing
+case "${1:-}" in
+    check-config)
+        shift
+        config_check "$@"
+        ;;
+    check-endpoints)
+        shift
+        endpoints_check "$@"
+        ;;
+    start)
+        shift
+        start "$@"
+        ;;
+    stop)
+        shift
+        stop "$@"
+        ;;
+    status)
+        shift
+        status "$@"
+        ;;
+    start-container)
+        shift
+        start_container "$@"
+        ;;
+    stop-container)
+        shift
+        stop_container "$@"
+        ;;
+    status-container)
+        shift
+        status_container "$@"
+        ;;
+    enable-container)
+        shift
+        enable_container "$@"
+        ;;
+    disable-container)
+        shift
+        disable_container "$@"
+        ;;
+    -h|--help)
+        show_help
+        exit 0
+        ;;
+    "")
+        echo "Error: No command specified"
+        show_help
+        exit 1
+        ;;
+    *)
+        echo "Error: Unknown command: $1"
+        show_help
+        exit 1
+        ;;
+esac

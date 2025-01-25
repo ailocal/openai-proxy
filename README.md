@@ -1,10 +1,12 @@
+---
+alias: openai-proxy
+---
 # openai-proxy
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![HAProxy](https://img.shields.io/badge/HAProxy-2.4%2B-blue)](https://www.haproxy.org/)
-[![Tests](https://github.com/ailocal/openai-proxy/actions/workflows/test.yml/badge.svg)](https://github.com/ailocal/openai-proxy/actions/workflows/test.yml)
 
-Portable HTTP proxy for routing select OpenAI API paths to alternative endpoints.
+A simple HAProxy configuration for routing OpenAI API requests to alternative endpoints.
 
 Use unmodified tools (like [Aider](https://aider.chat])) with self-hosted services such as:
 
@@ -12,11 +14,6 @@ Use unmodified tools (like [Aider](https://aider.chat])) with self-hosted servic
 - [Ollama](https://ollama.com): Large Language Models
 - [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI): Text to Speech
 
-The OpenAI SDK's allow you to direct traffic to an alternate provider:
-
-    ```shell
-    export OPENAI_BASE_URL=http://localhost:2020/v1
-    ```
 This project provides a simple way to route different services to different places.
 
 Feel free to try it out with Whisper running on my M4 Mac Mini: https://api.ailocal.org
@@ -24,6 +21,12 @@ Feel free to try it out with Whisper running on my M4 Mac Mini: https://api.ailo
 Uses [HAProxy](https://haproxy.org), the Reliable, High Performance TCP/HTTP Load Balancer.
 
 ## How It Works
+
+OpenAI's SDKs allow you to modify where they send requests but setting the OPENAI_BASE_URL environment variable.
+
+    ```shell
+    export OPENAI_BASE_URL=http://localhost:2020/v1
+    ```
 
 ![Architecture](docs/images/architecture.mmd.svg)
 
@@ -44,104 +47,89 @@ The proxy is transparent to the tools - they continue to work as if talking dire
 
 ## Quickstart
 
-1. **Clone the git repository**
+### 1. Start the Proxy
 
-    ```shell
-    git clone https://github.com/ailocal/openai-proxy
-    ```
+Choose one of these methods:
 
-2. **Configure environment variables**
+**Option A: Direct with HAProxy**
+```bash
+# Debian/Ubuntu
+sudo apt install haproxy
 
-    Copy `config/env-example` to `config/env` and modify as needed:
+# Fedora/RHEL
+sudo dnf install haproxy
 
-    ```shell
-    cp config/env-example config/env
-    ```
+# macOS
+brew install haproxy
 
-    Edit `config/env` to set your desired configuration.
+# Run the proxy
+haproxy -f config/haproxy/conf.d/openai-proxy.cfg
+```
 
-3. **Start the proxy**
+**Option B: Using Containers**
+```bash
+# Using podman-compose
+podman-compose up -d
 
-    ```shell
-    bin/openai-proxy start
-    ```
+# Or using plain podman
+podman run -d \
+  --name openai-proxy \
+  --network host \
+  -v ./config/haproxy/conf.d/openai-proxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro \
+  -p 127.0.0.1:2020:2020 \
+  haproxytech/haproxy-alpine:latest
+```
 
-    You'll see output like this:
+### 2. Configure Your Environment
 
-    ```shell
-    OpenAI API Routing Table
+The `OPENAI_BASE_URL` environment variable must be set for any tool using an OpenAI SDK to use your proxy:
 
-    ● UP    /v1/audio/transcriptions      http://localhost:9000
-    ● UP    /v1/chat/completions          http://localhost:11434
-    ● UP    /v1/audio/speech              http://localhost:8080
+```bash
+OPENAI_BASE_URL=http://localhost:2020/v1
+```
 
-    OpenAI API Backend: https://api.openai.com:443
+You can set this in several ways:
+- In your shell startup file (~/.bashrc, ~/.zshrc, etc)
+- For the current session: `export OPENAI_BASE_URL=http://localhost:2020/v1`
+- When running a command: `OPENAI_BASE_URL=http://localhost:2020/v1 aider`
+- In a project's .env file
+- In your tool's configuration file (e.g. .aiderrc)
 
-    Listening on: http://127.0.0.1:2020
-    ```
+### 3. Verify It Works
 
-    The status indicators show:
-    - 🟢 GREEN = Backend is UP and responding
-    - 🔴 RED = Backend is DOWN or unreachable
-    - 🟡 YELLOW = Status unknown
+Test with curl:
+```bash
+curl http://localhost:2020/v1/chat/completions
+```
 
-    In this example, all backends are UP and the audio transcriptions endpoint is routed to a custom Whisper API endpoint.
-
-4. **Configure your application**
-
-    Set the `OPENAI_BASE_URL` environment variable in your application to point to the proxy:
-
-    ```shell
-    export OPENAI_BASE_URL="http://localhost:2020"
-    ```
+Or try a tool like Aider:
+```bash
+aider --help  # Should show it's using your proxy URL
+```
 
 ## Configuration
 
-Configuration is provided via environment variables (defined in `config/env` or exported in the shell).
+Configuration is provided through HAProxy's configuration file. A sample configuration is provided in `config/haproxy/conf.d/openai-proxy.cfg-example`. When you first run the proxy, it will offer to copy this example configuration for you.
 
-### Environment Variables
+See the [detailed configuration guide](docs/configuration.md) for complete information about configuring endpoints and routing.
 
-All environment variables have a common prefix `OPENAI_PROXY_`:
+## Commands
 
-- `OPENAI_PROXY_PORT`: Port to listen on (default: 2020)
-- `OPENAI_PROXY_BIND_IP`: IP address to bind to (default: 127.0.0.1)
-- `OPENAI_PROXY_BACKEND_AUDIO_TRANSCRIPTIONS`: Backend for audio transcription
-- `OPENAI_PROXY_BACKEND_CHAT_COMPLETIONS`: Backend for chat completions
-- `OPENAI_PROXY_BACKEND_AUDIO_SPEECH`: Backend for text-to-speech
-- `OPENAI_PROXY_BACKEND_OPENAI`: Default backend for other OpenAI API paths
+Run `openai-proxy --help` to see all available commands:
 
-### Welcome Page
+- `check-config`: Check HAProxy configuration syntax
+- `check-endpoints`: Test the OpenAI API endpoints
+- `start`: Start HAProxy directly on the host
+- `stop`: Stop HAProxy on the host
+- `status`: Show HAProxy status on the host
+- `start-container`: Start the proxy container
+- `stop-container`: Stop the proxy container
+- `status-container`: Show proxy container status
+- `enable-container`: Enable container auto-start with system
+- `disable-container`: Disable container auto-start with system
 
-The proxy serves a welcome page at the root URL (/) showing available endpoints and their routing.
-This can be customized by modifying `config/haproxy/pages/welcome.http`.
-
-**Example**:
-
-```shell
-export OPENAI_PROXY_PORT=2020
-export OPENAI_PROXY_BACKEND_CHAT_COMPLETIONS=http://localhost:11434 # ollama
-export OPENAI_PROXY_BACKEND_AUDIO_SPEECH=http://localhost:8880 # kokoro-fastapi
-export OPENAI_PROXY_BACKEND_AUDIO_TRANSCRIPTIONS=http://localhost:2022 # whisper
-export OPENAI_PROXY_BACKEND_DEFAULT=https://api.openai.com:443
-```
-
-### Commands
-
-- `start`: Start the proxy (default if no command specified)
-- `stop`: Stop the proxy
-- `restart`: Stop and then start the proxy  
-- `reload`: Reload the configuration without stopping
-- `status`: Show proxy status
-
-### Command Line Arguments
-
-- `-h, --help`: Show help message and exit
-- `-v, --version`: Show version information and exit
-- `-b, --bind`: Specify the IP address to bind to (default: 127.0.0.1)
-- `-p, --port`: Specify the port to listen on (default: 2020)
-- `-c, --config`: Specify an alternate config file path
-- `--verbose`: Enable verbose output
-- `--debug`: Enable debug output
+Each command supports `-h` or `--help` for detailed usage information.
+Some commands also support `-v` or `--verbose` for detailed output.
 
 ## Usage
 
@@ -183,60 +171,65 @@ To verify that the proxy is working correctly:
 - **Configuration errors**: Check the environment variables and ensure they are correctly set.
 - **Missing Backend Mapping**: If a specific API path is not routed as expected, ensure the corresponding environment variable is defined correctly.
 
-## See Also
+## Verifying the Setup
 
-- [OpenAI API Documentation](https://platform.openai.com/docs/api-reference)
-- [HAProxy Documentation](https://www.haproxy.org/#docs)
+You can verify your setup using two check commands:
+
+### 1. Check Configuration
+
+Verify the HAProxy configuration syntax:
+
+```bash
+$ openai-proxy check-config
+Checking HAProxy configuration: /etc/haproxy/conf.d/openai-proxy.cfg
+Configuration is valid
+```
+
+For more detailed output, use the verbose flag:
+
+```bash
+$ openai-proxy check-config -v
+Checking HAProxy configuration: /etc/haproxy/conf.d/openai-proxy.cfg
+Configuration file /etc/haproxy/conf.d/openai-proxy.cfg has valid syntax
+Configuration is valid
+```
+
+### 2. Check Endpoints
+
+Test that all OpenAI API endpoints are reachable through the proxy:
+
+```bash
+$ openai-proxy check-endpoints
+Testing OpenAI Proxy endpoints...
+
+1. Testing /v1/audio/transcriptions...
+✓ Audio transcription endpoint working
+Response: {"text": "huge manatees"}
+
+2. Testing /v1/chat/completions...
+✓ Chat completions endpoint working
+
+3. Testing /v1/audio/speech...
+✓ Audio speech endpoint working
+
+Verification complete!
+```
+
+For detailed API responses, use the verbose flag:
+
+```bash
+$ openai-proxy check-endpoints -v
+```
+
+Note: The endpoints check requires your `OPENAI_API_KEY` to be set in the environment.
 
 ## License
 
 This project is licensed under the MIT License.
 
-## Installation
-
-You can install openai-proxy either as a system service or user service:
-
-### Quick Install
-
-```bash
-# Install using make (defaults to user installation)
-make install
-
-# For system-wide installation (requires root)
-sudo make install ARGS="--system"
-```
-
-Or install manually using one of these methods:
-
-### User Service (Recommended for development)
-
-```bash
-# Install as user service
-bin/openai-proxy-install --user
-
-# Start the service
-systemctl --user enable openai-proxy
-systemctl --user start openai-proxy
-
-# Check status
-systemctl --user status openai-proxy
-```
-
-### System Service (For production/servers)
-
-```bash
-# Install as system service (requires root)
-sudo bin/openai-proxy-install --system
-
-# Start the service
-sudo systemctl enable openai-proxy
-sudo systemctl start openai-proxy
-
-# Check status
-sudo systemctl status openai-proxy
-```
 
 ## See Also
 
+- [OpenAI API Documentation](https://platform.openai.com/docs/api-reference)
+- [HAProxy Documentation](https://www.haproxy.org/#docs)
 - [justsayit (addons.mozilla.org)](https://addons.mozilla.org/en-US/firefox/addon/justsayit/): Enables voice typing on many websites using any Whisper API service.
--  

@@ -1,0 +1,25 @@
+# Shell completion for openai-proxy
+_openai_proxy_completion() {
+    local cur prev words cword
+    _init_completion || return
+
+    # List of all available commands
+    local commands="check-config check-endpoints start stop status start-container stop-container status-container enable-container disable-container"
+
+    # Handle command completion
+    if [ $cword -eq 1 ]; then
+        COMPREPLY=( $(compgen -W "$commands" -- "$cur") )
+        return 0
+    fi
+
+    # Handle options for specific commands
+    case "${words[1]}" in
+        check-config|check-endpoints|status)
+            COMPREPLY=( $(compgen -W "-h --help -v --verbose" -- "$cur") )
+            ;;
+        start|stop|start-container|stop-container|status-container|enable-container|disable-container)
+            COMPREPLY=( $(compgen -W "-h --help" -- "$cur") )
+            ;;
+    esac
+} &&
+complete -F _openai_proxy_completion openai-proxy

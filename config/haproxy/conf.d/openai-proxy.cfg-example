@@ -1,0 +1,99 @@
+# OpenAI API Proxy Configuration
+# Install in: /etc/haproxy/conf.d/openai-proxy.cfg
+
+global
+    log stdout local0 notice
+
+defaults
+    log     global
+    mode    http
+    option  httplog
+    option  http-server-close
+    option  http-pretend-keepalive
+    timeout connect 5000
+    timeout client  50000
+    timeout server  50000
+
+frontend openai_proxy
+    bind 127.0.0.1:2020
+    mode http
+
+    # Set required proxy headers
+    http-request set-header X-Forwarded-Proto https if { ssl_fc }
+    http-request set-header X-Forwarded-Port %[dst_port]
+    http-request set-header X-Forwarded-For %[src]
+
+    # Health check endpoint
+    acl path_health path /health
+    http-request return status 200 content-type "text/plain" string "healthy" if path_health
+
+    # Route based on path
+    acl path_audio_transcriptions path_beg /v1/audio/transcriptions
+    acl path_chat_completions path_beg /v1/chat/completions
+    acl path_audio_speech path_beg /v1/audio/speech
+    acl path_v1 path_beg /v1
+
+    # Welcome page for non-v1 paths (move this before the routing)
+    http-request return status 200 content-type "text/html" string "<!DOCTYPE html><html><head><title>Welcome to OpenAI-Proxy</title><style>body{font-family:sans-serif;max-width:800px;margin:40px auto;padding:0 20px}.endpoint{background:#f4f4f4;padding:10px;margin:10px 0;border-radius:4px}.title{color:#333}</style></head><body><h1>Welcome to OpenAI-Proxy</h1><p>Available API endpoints:</p><div class=\"endpoint\">/v1/audio/transcriptions - Audio transcription service</div><div class=\"endpoint\">/v1/chat/completions - Chat completions service</div><div class=\"endpoint\">/v1/audio/speech - Text to speech service</div><div class=\"endpoint\">/v1/* - All other OpenAI API endpoints</div></body></html>" if !path_v1
+
+    # Route to appropriate backends
+    use_backend backend_audio_transcriptions if path_audio_transcriptions
+    use_backend backend_chat_completions if path_chat_completions
+    use_backend backend_audio_speech if path_audio_speech
+    use_backend backend_openai if path_v1
+
+# Audio Transcriptions Backend
+backend backend_audio_transcriptions
+    mode http
+    option forwardfor
+    
+    # Required headers for OpenAI API
+    http-request set-header Host api.openai.com
+    http-request set-header Authorization %[req.hdr(Authorization)]
+    http-request set-header Content-Type %[req.hdr(Content-Type)]
+    
+    # Ensure proper SSL/TLS connection
+    server openai api.openai.com:443 ssl verify none sni str(api.openai.com)
+    
+    # Local Whisper Example (uncomment to use)
+    #
+    # http-request set-header Host localhost
+    # server ollama localhost:2022
+
+    # Free Public Whisper Example (uncomment to use)
+    #
+    # http-request set-header Host api.ailocal.org # Required for SSL sites 
+    # server whisper api.ailocal.org:443 ssl verify none sni str(api.ailocal.org)
+
+# Chat Completions Backend
+backend backend_chat_completions
+    mode http
+    option forwardfor
+    http-request set-header Host api.openai.com
+    http-request set-header Authorization %[req.hdr(Authorization)]
+    server openai api.openai.com:443 ssl verify none sni str(api.openai.com)
+    
+    # Local Ollama Example (uncomment to use)
+    #
+    # http-request set-header Host localhost
+    # server ollama localhost:11434
+
+# Audio Speech Backend
+backend backend_audio_speech
+    mode http
+    option forwardfor
+    http-request set-header Host api.openai.com
+    http-request set-header Authorization %[req.hdr(Authorization)]
+    server openai api.openai.com:443 ssl verify none sni str(api.openai.com)
+    
+    # Local TTS Example (uncomment to use)
+    #
+    # http-request set-header Host localhost
+    # server tts localhost:8880 
+
+# Default OpenAI Backend
+backend backend_openai
+    mode http
+    option forwardfor
+    http-request set-header Host api.openai.com
+    server openai api.openai.com:443 ssl verify none sni str(api.openai.com)
