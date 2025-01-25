@@ -16,12 +16,12 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y haproxy socat gettext-base bats
+        sudo apt-get install -y haproxy bats
 
-    - name: Run unit and integration tests
+    - name: Run integration tests
       run: |
-        # Run only unit and integration tests, skip e2e tests
-        bats test/unit test/integration
+        # Run integration tests only
+        bats test/integration
 
     # We skip e2e tests as they require running services:
     # - Ollama

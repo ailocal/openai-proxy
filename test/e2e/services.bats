@@ -2,12 +2,7 @@
 
 load ../test_helper
 
-# Add E2E specific setup
 setup() {
-    echo "Using proxy at: $PROXY" >&2
-    echo "Test socket: $OPENAI_PROXY_SOCKET" >&2
-    echo "Test port: $OPENAI_PROXY_PORT" >&2
-    
     # Load E2E specific configuration if present
     if [ -f "$E2E_ENV_FILE" ]; then
         source "$E2E_ENV_FILE"
@@ -21,19 +16,6 @@ setup() {
     if [ -n "${E2E_TEST_TIMEOUT:-}" ]; then
         export BATS_TEST_TIMEOUT="$E2E_TEST_TIMEOUT"
     fi
-    
-    # First stop any running instance
-    "$PROXY" stop || true
-    sleep 1  # Give it time to fully stop
-    
-    # Start proxy with E2E configuration
-    "$PROXY" start
-    sleep 2  # Give services time to start
-}
-
-# Add E2E specific teardown
-teardown() {
-    "$PROXY" stop || true
 }
 
 @test "verify all required services are configured" {
