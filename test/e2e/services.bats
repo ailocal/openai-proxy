@@ -32,12 +32,14 @@ setup() {
 }
 
 @test "chat completions with local Ollama" {
+    [ -n "$OPENAI_API_KEY" ] || skip "OPENAI_API_KEY not set"
     [ -n "${OPENAI_PROXY_BACKEND_CHAT_COMPLETIONS:-}" ] || \
         skip "OPENAI_PROXY_BACKEND_CHAT_COMPLETIONS not configured"
     
     run curl -s -X POST \
         -H "Content-Type: application/json" \
-        -d '{"model":"llama2","messages":[{"role":"user","content":"Say hello"}]}' \
+        -H "Authorization: Bearer $OPENAI_API_KEY" \
+        -d '{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"Say hello"}]}' \
         "http://localhost:${OPENAI_PROXY_PORT}/v1/chat/completions"
     
     echo "Status: $status" >&2
@@ -48,6 +50,7 @@ setup() {
 }
 
 @test "audio transcription with local Whisper" {
+    [ -n "$OPENAI_API_KEY" ] || skip "OPENAI_API_KEY not set"
     [ -n "${OPENAI_PROXY_BACKEND_AUDIO_TRANSCRIPTIONS:-}" ] || \
         skip "OPENAI_PROXY_BACKEND_AUDIO_TRANSCRIPTIONS not configured"
     
@@ -57,6 +60,7 @@ setup() {
     
     run curl -s -X POST \
         -H "Content-Type: multipart/form-data" \
+        -H "Authorization: Bearer $OPENAI_API_KEY" \
         -F "file=@$audio_file" \
         "http://localhost:${OPENAI_PROXY_PORT}/v1/audio/transcriptions"
     
@@ -68,11 +72,13 @@ setup() {
 }
 
 @test "text to speech with local service" {
+    [ -n "$OPENAI_API_KEY" ] || skip "OPENAI_API_KEY not set"
     [ -n "${OPENAI_PROXY_BACKEND_AUDIO_SPEECH:-}" ] || \
         skip "OPENAI_PROXY_BACKEND_AUDIO_SPEECH not configured"
     
     run curl -s -X POST \
         -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $OPENAI_API_KEY" \
         -d '{"input":"Hello world","voice":"alloy"}' \
         "http://localhost:${OPENAI_PROXY_PORT}/v1/audio/speech"
     
