@@ -10,11 +10,38 @@ command -v realpath &> /dev/null || {
 TEST_HELPER_DIR="$(dirname -- "$(realpath "${BASH_SOURCE[0]}")")"
 PROJECT_ROOT="$(realpath "${TEST_HELPER_DIR}/..")"
 
-# Fix the PROXY path to point directly to the bin/openai-proxy script
-PROXY="${PROJECT_ROOT}/bin/openai-proxy"
+# Set up test configuration paths
+export TEST_CONFIG_DIR="/tmp/haproxy-test-$$"
+export TEST_CONFIG_FILE="${TEST_CONFIG_DIR}/haproxy.cfg"
+export TEST_SOCKET_FILE="${TEST_CONFIG_DIR}/haproxy.sock"
+export TEST_PID_FILE="${TEST_CONFIG_DIR}/haproxy.pid"
 
 # Set up E2E environment file path
 export E2E_ENV_FILE="${PROJECT_ROOT}/test/fixtures/e2e.env"
+
+# HAProxy control functions
+function start_haproxy() {
+    mkdir -p "$TEST_CONFIG_DIR"
+    cp "${PROJECT_ROOT}/config/haproxy/conf.d/openai-proxy.cfg" "$TEST_CONFIG_FILE"
+    
+    # Start HAProxy with test configuration
+    haproxy -f "$TEST_CONFIG_FILE" -p "$TEST_PID_FILE" -S "$TEST_SOCKET_FILE" -D
+    sleep 1  # Give HAProxy time to start
+    
+    # Verify HAProxy is running
+    if ! pgrep -F "$TEST_PID_FILE" > /dev/null; then
+        echo "Failed to start HAProxy" >&2
+        return 1
+    fi
+}
+
+function stop_haproxy() {
+    if [ -f "$TEST_PID_FILE" ]; then
+        kill $(cat "$TEST_PID_FILE") || true
+        rm -f "$TEST_PID_FILE"
+    fi
+    rm -rf "$TEST_CONFIG_DIR"
+}
 
 # Service control functions
 function start_ollama_service() {
@@ -65,45 +92,19 @@ if [[ -z "$BATS_TEST_HELPER_SETUP_DONE" ]]; then
     if [[ -z "$BATS_TEST_HELPER_DEBUG_SHOWN" ]]; then
         echo "Test helper dir: $TEST_HELPER_DIR" >&2
         echo "Project root: $PROJECT_ROOT" >&2
-        echo "Proxy path: $PROXY" >&2
+        echo "Test config: $TEST_CONFIG_FILE" >&2
         echo "E2E env file: $E2E_ENV_FILE" >&2
         export BATS_TEST_HELPER_DEBUG_SHOWN=1
     fi
     
-    # Verify proxy script exists and is executable
-    if [[ ! -x "$PROXY" ]]; then
-        echo "ERROR: Proxy script not found or not executable at: $PROXY" >&2
-        return 1
-    fi
-    
-    # Export PROXY so it's available to all tests
-    export PROXY
-    
     # Set test-specific environment variables
     export OPENAI_PROXY_PORT=2021
-    export OPENAI_PROXY_SOCKET="/tmp/haproxy-test-$$.sock"
-    export OPENAI_PROXY_CONFIG="/tmp/haproxy-test-$$.cfg"
-
+    
     # Set test backend URLs
     export OPENAI_PROXY_BACKEND_AUDIO_TRANSCRIPTIONS="http://localhost:8001"
     export OPENAI_PROXY_BACKEND_CHAT_COMPLETIONS="http://localhost:8002"
     export OPENAI_PROXY_BACKEND_AUDIO_SPEECH="http://localhost:8003"
     export OPENAI_PROXY_BACKEND_OPENAI="http://localhost:8000"
-    export WELCOME_PAGE="${PROJECT_ROOT}/config/haproxy/pages/welcome.http"
-
-    # Source the proxy script to make its functions available for testing
-    if [[ -z "$OPENAI_PROXY_FUNCTIONS_LOADED" ]]; then
-        # Create a temporary file to hold just the functions
-        TEMP_FUNCTIONS=$(mktemp)
-        
-        # Extract functions and supporting code, excluding the main() call
-        sed '/^main "\$@"$/d' "$PROXY" > "$TEMP_FUNCTIONS"
-        
-        # Source the functions
-        source "$TEMP_FUNCTIONS"
-        rm -f "$TEMP_FUNCTIONS"
-        export OPENAI_PROXY_FUNCTIONS_LOADED=1
-    fi
 
     # Mark setup as done
     export BATS_TEST_HELPER_SETUP_DONE=1
@@ -146,15 +147,10 @@ check_backend_status() {
 }
 
 teardown() {
-    if [[ -n "$PROXY" ]]; then
-        "$PROXY" stop || true
-    fi
-    rm -f "$OPENAI_PROXY_CONFIG" "$OPENAI_PROXY_SOCKET" || true
-    # Clean up any test-specific environment variables
-    unset OPENAI_PROXY_BACKEND_AUDIO_TRANSCRIPTIONS
-    unset OPENAI_PROXY_BACKEND_CHAT_COMPLETIONS
-    unset OPENAI_PROXY_BACKEND_AUDIO_SPEECH
-    unset OPENAI_PROXY_BACKEND_OPENAI
+    stop_haproxy
+    stop_ollama_service
+    stop_whisper_service
+    stop_tts_service
 }
 
 load_test_env() {

@@ -16,6 +16,9 @@ setup() {
     if [ -n "${E2E_TEST_TIMEOUT:-}" ]; then
         export BATS_TEST_TIMEOUT="$E2E_TEST_TIMEOUT"
     fi
+    
+    # Start HAProxy with test configuration
+    start_haproxy
 }
 
 @test "verify all required services are configured" {
