@@ -1,12 +1,12 @@
 # Common test helper functions for openai-proxy tests
 #
-# This file sets up an isolated HAProxy instance for testing, separate from
-# the system HAProxy service. This approach:
-# - Allows tests to run without sudo
-# - Prevents interference with production traffic
-# - Enables testing on different ports/sockets
-# - Works safely in CI/CD environments
-# - Keeps test environment isolated and reproducible
+# Supports two test approaches:
+# 1. Synthetic tests: Fresh HAProxy instance for isolated testing
+# 2. System tests: Tests against installed system HAProxy
+#
+# Usage:
+#   load synthetic_helper  # For synthetic tests
+#   load system_helper    # For system tests
 
 # Ensure realpath is available
 command -v realpath &> /dev/null || {
