@@ -34,7 +34,8 @@ function start_haproxy() {
     cp "${PROJECT_ROOT}/config/haproxy/conf.d/openai-proxy.cfg" "$TEST_CONFIG_FILE"
     
     # Start HAProxy with test configuration
-    haproxy -f "$TEST_CONFIG_FILE" -p "$TEST_PID_FILE" -S "$TEST_SOCKET_FILE" -D
+    # Added -W for master-worker mode to support socket
+    haproxy -W -f "$TEST_CONFIG_FILE" -p "$TEST_PID_FILE" -S "$TEST_SOCKET_FILE" -D
     sleep 1  # Give HAProxy time to start
     
     # Verify HAProxy is running
