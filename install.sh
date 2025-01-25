@@ -21,6 +21,12 @@ else
     OS="Unknown"
 fi
 
+# Check if we need sudo for a directory
+need_sudo() {
+    local dir="$1"
+    [ ! -w "$dir" ]
+}
+
 # Install HAProxy if not present
 install_haproxy() {
     if ! command -v haproxy &> /dev/null; then
@@ -50,24 +56,34 @@ install_haproxy() {
 # Create required directories
 create_directories() {
     echo -e "${YELLOW}Creating required directories...${NC}"
-    sudo mkdir -p /etc/haproxy/conf.d
+    if need_sudo "/etc/haproxy"; then
+        sudo mkdir -p /etc/haproxy/conf.d
+    else
+        mkdir -p /etc/haproxy/conf.d
+    fi
 }
 
 # Copy configuration files
 copy_files() {
     echo -e "${YELLOW}Copying configuration files...${NC}"
-    sudo cp config/haproxy/conf.d/openai-proxy.cfg /etc/haproxy/conf.d/
+    if need_sudo "/etc/haproxy/conf.d"; then
+        sudo cp config/haproxy/conf.d/openai-proxy.cfg /etc/haproxy/conf.d/
+    else
+        cp config/haproxy/conf.d/openai-proxy.cfg /etc/haproxy/conf.d/
+    fi
 }
 
 # Verify configuration
 verify_config() {
     echo -e "${YELLOW}Verifying HAProxy configuration...${NC}"
-    if sudo haproxy -c -f /etc/haproxy/haproxy.cfg; then
-        echo -e "${GREEN}Configuration is valid${NC}"
+    if need_sudo "/etc/haproxy"; then
+        sudo haproxy -c -f /etc/haproxy/haproxy.cfg
     else
+        haproxy -c -f /etc/haproxy/haproxy.cfg
+    fi && echo -e "${GREEN}Configuration is valid${NC}" || {
         echo -e "${RED}Configuration check failed${NC}"
         exit 1
-    fi
+    }
 }
 
 # Restart HAProxy
@@ -75,7 +91,11 @@ restart_haproxy() {
     echo -e "${YELLOW}Restarting HAProxy...${NC}"
     case $OS in
         "Ubuntu"|"Debian"|"Fedora"|"RedHat")
-            sudo systemctl restart haproxy
+            if need_sudo "/etc/haproxy"; then
+                sudo systemctl restart haproxy
+            else
+                systemctl restart haproxy
+            fi
             ;;
         "macOS")
             brew services restart haproxy
