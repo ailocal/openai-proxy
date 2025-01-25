@@ -20,6 +20,10 @@ setup() {
         export BATS_TEST_TIMEOUT="$E2E_TEST_TIMEOUT"
     fi
     
+    # First stop any running instance
+    "$PROXY" stop || true
+    sleep 1  # Give it time to fully stop
+    
     # Start proxy with E2E configuration
     "$PROXY" start
     sleep 2  # Give services time to start
