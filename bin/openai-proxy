@@ -116,11 +116,8 @@ function ensure_config() {
                     exit 1
                     ;;
                 *)
-                    # Create directory if it doesn't exist
-                    mkdir -p "$(dirname "$config_path")"
-                    
                     # Copy example config
-                    cp "$EXAMPLE_CONFIG_PATH" "$config_path"
+                    cp "$EXAMPLE_CONFIG_PATH" "${EXAMPLE_CONFIG_PATH/-example}"
                     echo -e "${GREEN}Copied example config to: $config_path${NC}"
                     ;;
             esac
