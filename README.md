@@ -97,15 +97,25 @@ You can set this in several ways:
 
 ### 3. Verify It Works
 
-Test with curl:
+Use the built-in endpoint checker to verify your setup:
+
 ```bash
-curl http://localhost:2020/v1/chat/completions
+$ openai-proxy check-endpoints
+Testing OpenAI Proxy endpoints...
+
+1. Testing /v1/audio/transcriptions...
+✓ Audio transcription endpoint working
+
+2. Testing /v1/chat/completions...
+✓ Chat completions endpoint working
+
+3. Testing /v1/audio/speech...
+✓ Audio speech endpoint working
+
+Verification complete!
 ```
 
-Or try a tool like Aider:
-```bash
-aider --help  # Should show it's using your proxy URL
-```
+Note: This requires your `OPENAI_API_KEY` to be set in the environment.
 
 ## Configuration
 
