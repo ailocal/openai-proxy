@@ -8,6 +8,8 @@ alias: openai-proxy
 
 A simple HAProxy configuration for routing OpenAI API requests to alternative endpoints.
 
+![Architecture](docs/images/architecture.mmd.svg)
+
 Use unmodified tools (like [Aider](https://aider.chat])) with self-hosted services such as:
 
 - [Whisper.cpp](https://github.com/ggerganov/whisper.cpp): Voice transcription
