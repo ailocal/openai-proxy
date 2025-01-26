@@ -20,32 +20,31 @@ Feel free to try it out with Whisper running on my M4 Mac Mini: https://api.ailo
 
 Uses [HAProxy](https://haproxy.org), the Reliable, High Performance TCP/HTTP Load Balancer.
 
+## Usage
+
+```shell
+Usage: openai-proxy <command> [options]
+
+Commands:
+  check-config        Check HAProxy configuration syntax
+  check-endpoints     Test the OpenAI API endpoints
+
+  start              Start HAProxy directly on the host
+  stop               Stop HAProxy on the host 
+  status             Show HAProxy status on the host
+
+  start-container    Start the proxy container
+  stop-container     Stop the proxy container
+  status-container   Show proxy container status
+  enable-container   Enable container auto-start with system
+  disable-container  Disable container auto-start with system
+
+Global Options:
+  -h, --help     Show this help message
+  -v, --verbose  Show detailed output
+```
+
 ## How It Works
-
-OpenAI's SDKs allow you to modify where they send requests but setting the OPENAI_BASE_URL environment variable.
-
-    ```shell
-    export OPENAI_BASE_URL=http://localhost:2020/v1
-    ```
-
-![Architecture](docs/images/architecture.mmd.svg)
-
-1. **Tool Configuration**: Tools that use the OpenAI API (like Aider) check the `OPENAI_BASE_URL` environment variable
-2. **Request Routing**: When set to `http://localhost:2020`, all API requests go through the OpenAI Proxy
-3. **Selective Routing**: The proxy examines the request path and routes to different backends:
-   - `/v1/audio/transcriptions` → Local Whisper server for voice-to-text
-   - `/v1/chat/completions` → Local LLM server (e.g. Ollama)
-   - `/v1/audio/speech` → Local Text-to-Speech server
-   - All other `/v1/*` paths → OpenAI's API
-
-This allows you to:
-- Use local services for specific features (faster, private, cheaper)
-- Fall back to OpenAI's API for everything else
-- Use standard tools without modification
-
-The proxy is transparent to the tools - they continue to work as if talking directly to OpenAI's API.
-
-## Quickstart
 
 ### 1. Start the Proxy
 
