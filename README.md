@@ -133,22 +133,26 @@ Some commands also support `-v` or `--verbose` for detailed output.
 
 ## Usage
 
-Start the proxy with defaults:
-
 ```shell
-bin/openai-proxy
-```
+Usage: openai-proxy <command> [options]
 
-Start the proxy with verbose output:
+Commands:
+  check-config        Check HAProxy configuration syntax
+  check-endpoints     Test the OpenAI API endpoints
 
-```shell
-bin/openai-proxy --verbose
-```
+  start              Start HAProxy directly on the host
+  stop               Stop HAProxy on the host 
+  status             Show HAProxy status on the host
 
-Start the proxy with a custom configuration file:
+  start-container    Start the proxy container
+  stop-container     Stop the proxy container
+  status-container   Show proxy container status
+  enable-container   Enable container auto-start with system
+  disable-container  Disable container auto-start with system
 
-```shell
-bin/openai-proxy --config /path/to/custom/env
+Global Options:
+  -h, --help     Show this help message
+  -v, --verbose  Show detailed output
 ```
 
 ## Testing
