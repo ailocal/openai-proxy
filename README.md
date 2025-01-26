@@ -123,23 +123,6 @@ Configuration is provided through HAProxy's configuration file. A sample configu
 
 See the [detailed configuration guide](docs/configuration.md) for complete information about configuring endpoints and routing.
 
-## Commands
-
-Run `openai-proxy --help` to see all available commands:
-
-- `check-config`: Check HAProxy configuration syntax
-- `check-endpoints`: Test the OpenAI API endpoints
-- `start`: Start HAProxy directly on the host
-- `stop`: Stop HAProxy on the host
-- `status`: Show HAProxy status on the host
-- `start-container`: Start the proxy container
-- `stop-container`: Stop the proxy container
-- `status-container`: Show proxy container status
-- `enable-container`: Enable container auto-start with system
-- `disable-container`: Disable container auto-start with system
-
-Each command supports `-h` or `--help` for detailed usage information.
-Some commands also support `-v` or `--verbose` for detailed output.
 
 ## Usage
 
