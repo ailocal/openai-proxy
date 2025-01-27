@@ -7,7 +7,7 @@ services:
     volumes:
       - ./config/haproxy/conf.d/openai-proxy.cfg:/usr/local/etc/haproxy/conf.d/openai-proxy.cfg:ro
     ports:
-      - "127.0.0.1:2020:2020"
+      - "0.0.0.0:2020:2020"
     restart: always
     healthcheck:
       test: ["CMD", "wget", "-O-", "-S", "127.0.0.1:2020/health"]
