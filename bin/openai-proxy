@@ -142,6 +142,7 @@ function show_help() {
     echo "  container          Manage container operations:"
     echo "    start             Start the proxy container"
     echo "    stop              Stop the proxy container"
+    echo "    restart           Restart the proxy container"
     echo "    status            Show proxy container status"
     echo "    enable            Enable container auto-start with system"
     echo "    disable           Disable container auto-start with system"
@@ -715,6 +716,37 @@ EOF
     fi
 }
 
+function container_restart() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                echo "Usage: openai-proxy container restart [OPTIONS]"
+                echo
+                echo "Restart the proxy container"
+                echo
+                echo "Options:"
+                echo "  -h, --help  Show this help message"
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Usage: openai-proxy container restart"
+                exit 1
+                ;;
+        esac
+    done
+
+    # Check dependencies before restarting
+    check_container_deps
+    
+    # Ensure we're in the project root
+    ensure_project_root
+
+    echo -e "${YELLOW}Restarting proxy container...${NC}"
+    container_stop
+    container_start
+}
+
 function container_disable() {
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -781,6 +813,10 @@ case "${1:-}" in
             enable)
                 shift
                 container_enable "$@"
+                ;;
+            restart)
+                shift
+                container_restart "$@"
                 ;;
             disable)
                 shift
