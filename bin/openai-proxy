@@ -145,6 +145,7 @@ function show_help() {
     echo "    restart           Restart the proxy container"
     echo "    status            Show proxy container status"
     echo "    logs              Show container logs"
+    echo "    exec              Connect to container shell"
     echo "    enable            Enable container auto-start with system"
     echo "    disable           Disable container auto-start with system"
     echo
@@ -786,6 +787,42 @@ function container_logs() {
     fi
 }
 
+function container_exec() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                echo "Usage: openai-proxy container exec [OPTIONS]"
+                echo
+                echo "Connect to container shell"
+                echo
+                echo "Options:"
+                echo "  -h, --help  Show this help message"
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Usage: openai-proxy container exec"
+                exit 1
+                ;;
+        esac
+    done
+
+    # Check dependencies before connecting
+    check_container_deps
+    
+    # Ensure we're in the project root
+    ensure_project_root
+
+    # Check if container is running
+    if ! podman-compose ps 2>/dev/null | grep -q "openai-proxy.*Up"; then
+        echo -e "${RED}Container is not running${NC}"
+        exit 1
+    fi
+
+    echo -e "${YELLOW}Connecting to container shell...${NC}"
+    podman exec -it openai-proxy sh
+}
+
 function container_disable() {
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -860,6 +897,10 @@ case "${1:-}" in
             logs)
                 shift
                 container_logs "$@"
+                ;;
+            exec)
+                shift
+                container_exec "$@"
                 ;;
             disable)
                 shift
