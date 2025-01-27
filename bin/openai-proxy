@@ -562,7 +562,7 @@ function container_stop() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             -h|--help)
-                echo "Usage: openai-proxy container-stop [OPTIONS]"
+                echo "Usage: openai-proxy container stop [OPTIONS]"
                 echo
                 echo "Stop the proxy container"
                 echo
@@ -572,7 +572,7 @@ function container_stop() {
                 ;;
             *)
                 echo "Unknown option: $1"
-                echo "Usage: openai-proxy container-stop"
+                echo "Usage: openai-proxy container stop"
                 exit 1
                 ;;
         esac
@@ -585,7 +585,34 @@ function container_stop() {
     ensure_project_root
 
     echo -e "${YELLOW}Stopping proxy container...${NC}"
-    podman-compose down
+
+    # Check if running as a service
+    local service_stopped=0
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl --user is-active openai-proxy.service >/dev/null 2>&1; then
+            echo -e "${YELLOW}Stopping systemd service...${NC}"
+            systemctl --user stop openai-proxy.service
+            service_stopped=1
+        fi
+    elif command -v brew >/dev/null 2>&1; then
+        if brew services list | grep -q "haproxy.*started"; then
+            echo -e "${YELLOW}Stopping brew service...${NC}"
+            brew services stop haproxy
+            service_stopped=1
+        fi
+    fi
+
+    # If service wasn't stopped, try podman-compose
+    if [ "$service_stopped" -eq 0 ]; then
+        if podman-compose ps 2>/dev/null | grep -q "openai-proxy"; then
+            echo -e "${YELLOW}Stopping container with podman-compose...${NC}"
+            podman-compose down
+        else
+            echo -e "${YELLOW}No running container found${NC}"
+            exit 0
+        fi
+    fi
+
     echo -e "${GREEN}Proxy container stopped${NC}"
 }
 
