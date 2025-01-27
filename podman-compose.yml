@@ -9,3 +9,9 @@ services:
     ports:
       - "127.0.0.1:2020:2020"
     restart: always
+    healthcheck:
+      test: ["CMD", "wget", "-O-", "-S", "127.0.0.1:2020/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
