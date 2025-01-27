@@ -1,21 +1,6 @@
 # OpenAI API Proxy Configuration
 # Install in: /etc/haproxy/conf.d/openai-proxy.cfg
 
-global
-
-defaults
-    mode    http
-    option  httplog
-    option  dontlognull
-    option  log-separate-errors
-    option  http-use-htx
-    option  http-server-close
-    option  http-pretend-keepalive
-    log-format "%ci:%cp [%tr] %ft %b/%s %TR/%Tw/%Tc/%Tr/%Ta %ST %B %CC %CS %tsc %ac/%fc/%bc/%sc/%rc %sq/%bq %hr %hs %{+Q}r"
-    timeout connect 5000
-    timeout client  50000
-    timeout server  50000
-
 frontend openai_proxy
     bind 127.0.0.1:2020
     mode http
@@ -51,23 +36,10 @@ backend backend_audio_transcriptions
     mode http
     option forwardfor
     
-    # Required headers for OpenAI API
     http-request set-header Host api.openai.com
     http-request set-header Authorization %[req.hdr(Authorization)]
     http-request set-header Content-Type %[req.hdr(Content-Type)]
-    
-    # Ensure proper SSL/TLS connection
     server openai api.openai.com:443 ssl verify none sni str(api.openai.com)
-    
-    # Local Whisper Example (uncomment to use)
-    #
-    # http-request set-header Host localhost
-    # server ollama localhost:2022
-
-    # Free Public Whisper Example (uncomment to use)
-    #
-    # http-request set-header Host api.ailocal.org # Required for SSL sites 
-    # server whisper api.ailocal.org:443 ssl verify none sni str(api.ailocal.org)
 
 # Chat Completions Backend
 backend backend_chat_completions
@@ -76,11 +48,6 @@ backend backend_chat_completions
     http-request set-header Host api.openai.com
     http-request set-header Authorization %[req.hdr(Authorization)]
     server openai api.openai.com:443 ssl verify none sni str(api.openai.com)
-    
-    # Local Ollama Example (uncomment to use)
-    #
-    # http-request set-header Host localhost
-    # server ollama localhost:11434
 
 # Audio Speech Backend
 backend backend_audio_speech
@@ -89,11 +56,6 @@ backend backend_audio_speech
     http-request set-header Host api.openai.com
     http-request set-header Authorization %[req.hdr(Authorization)]
     server openai api.openai.com:443 ssl verify none sni str(api.openai.com)
-    
-    # Local TTS Example (uncomment to use)
-    #
-    # http-request set-header Host localhost
-    # server tts localhost:8880 
 
 # Default OpenAI Backend
 backend backend_openai
