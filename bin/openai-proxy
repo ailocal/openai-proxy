@@ -469,18 +469,7 @@ function status() {
     if [ "$verbose" -eq 1 ]; then
         podman-compose ps
     else
-        if podman-compose ps 2>/dev/null | grep -q "openai-proxy"; then
-            local health=$(podman-compose ps | grep openai-proxy | grep -o '(.*)')
-            if [[ $health == "(healthy)" ]]; then
-                echo -e "  Status: ${GREEN}running (healthy)${NC}"
-            elif [[ $health == "(unhealthy)" ]]; then
-                echo -e "  Status: ${RED}running (unhealthy)${NC}"
-            else
-                echo -e "  Status: ${YELLOW}running${NC}"
-            fi
-        else
-            echo -e "  Status: ${RED}not running${NC}"
-        fi
+        SHOW_STATUS=1 container_status
     fi
 
     if [ "$verbose" -eq 0 ]; then
@@ -620,7 +609,32 @@ function container_stop() {
     echo -e "${GREEN}Proxy container stopped${NC}"
 }
 
+# Returns:
+# 0 - container is running
+# 1 - container is not running
+# Outputs status message if SHOW_STATUS is set
 function container_status() {
+    if podman-compose ps 2>/dev/null | grep -q "openai-proxy"; then
+        local health=$(podman-compose ps | grep openai-proxy | grep -o '(.*)')
+        if [ "${SHOW_STATUS:-0}" -eq 1 ]; then
+            if [[ $health == "(healthy)" ]]; then
+                echo -e "  Status: ${GREEN}running (healthy)${NC}"
+            elif [[ $health == "(unhealthy)" ]]; then
+                echo -e "  Status: ${RED}running (unhealthy)${NC}"
+            else
+                echo -e "  Status: ${YELLOW}running${NC}"
+            fi
+        fi
+        return 0
+    else
+        if [ "${SHOW_STATUS:-0}" -eq 1 ]; then
+            echo -e "  Status: ${RED}not running${NC}"
+        fi
+        return 1
+    fi
+}
+
+function container_status_command() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             -h|--help)
@@ -814,7 +828,7 @@ function container_exec() {
     ensure_project_root
 
     # Check if container is running
-    if ! podman-compose ps 2>/dev/null | grep -q "openai-proxy.*Up.*"; then
+    if ! container_status; then
         echo -e "${RED}Container is not running${NC}"
         exit 1
     fi
@@ -884,7 +898,7 @@ case "${1:-}" in
                 ;;
             status)
                 shift
-                container_status "$@"
+                container_status_command "$@"
                 ;;
             enable)
                 shift
