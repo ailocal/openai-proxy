@@ -139,11 +139,12 @@ function show_help() {
     echo "  stop               Stop HAProxy on the host" 
     echo "  status             Show HAProxy status on the host"
     echo
-    echo "  start-container    Start the proxy container"
-    echo "  stop-container     Stop the proxy container"
-    echo "  status-container   Show proxy container status"
-    echo "  enable-container   Enable container auto-start with system"
-    echo "  disable-container  Disable container auto-start with system"
+    echo "  container          Manage container operations:"
+    echo "    start             Start the proxy container"
+    echo "    stop              Stop the proxy container"
+    echo "    status            Show proxy container status"
+    echo "    enable            Enable container auto-start with system"
+    echo "    disable           Disable container auto-start with system"
     echo
     echo "Global Options:"
     echo "  -h, --help     Show this help message"
@@ -484,7 +485,7 @@ function status() {
     fi
 }
 
-function start_container() {
+function container_start() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             -h|--help)
@@ -515,7 +516,7 @@ function start_container() {
     echo -e "${GREEN}Proxy container started${NC}"
 }
 
-function stop_container() {
+function container_stop() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             -h|--help)
@@ -546,7 +547,7 @@ function stop_container() {
     echo -e "${GREEN}Proxy container stopped${NC}"
 }
 
-function status_container() {
+function container_status() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             -h|--help)
@@ -573,7 +574,7 @@ function status_container() {
     podman-compose ps
 }
 
-function enable_container() {
+function container_enable() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             -h|--help)
@@ -644,7 +645,7 @@ EOF
     fi
 }
 
-function disable_container() {
+function container_disable() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             -h|--help)
@@ -692,6 +693,41 @@ function disable_container() {
 
 # Main command processing
 case "${1:-}" in
+    container)
+        shift
+        case "${1:-}" in
+            start)
+                shift
+                container_start "$@"
+                ;;
+            stop)
+                shift
+                container_stop "$@"
+                ;;
+            status)
+                shift
+                container_status "$@"
+                ;;
+            enable)
+                shift
+                container_enable "$@"
+                ;;
+            disable)
+                shift
+                container_disable "$@"
+                ;;
+            "")
+                echo "Error: No container command specified"
+                show_help
+                exit 1
+                ;;
+            *)
+                echo "Error: Unknown container command: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+        ;;
     check-config)
         shift
         config_check "$@"
@@ -711,26 +747,6 @@ case "${1:-}" in
     status)
         shift
         status "$@"
-        ;;
-    start-container)
-        shift
-        start_container "$@"
-        ;;
-    stop-container)
-        shift
-        stop_container "$@"
-        ;;
-    status-container)
-        shift
-        status_container "$@"
-        ;;
-    enable-container)
-        shift
-        enable_container "$@"
-        ;;
-    disable-container)
-        shift
-        disable_container "$@"
         ;;
     -h|--help)
         show_help
