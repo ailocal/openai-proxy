@@ -547,9 +547,14 @@ function container_start() {
             exit 0
         elif podman-compose ps | grep -q "openai-proxy.*unhealthy"; then
             echo -e "${RED}Container is unhealthy${NC}"
+            echo -e "${YELLOW}Container logs:${NC}"
+            podman logs openai-proxy
+            echo -e "${YELLOW}Testing health endpoint directly:${NC}"
+            curl -v http://localhost:2020/health || true
             podman-compose ps
             exit 1
         fi
+        echo -e "${YELLOW}Still waiting... (attempt $i/6)${NC}"
         sleep 5
     done
 
