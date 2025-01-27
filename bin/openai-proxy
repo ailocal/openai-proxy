@@ -144,6 +144,7 @@ function show_help() {
     echo "    stop              Stop the proxy container"
     echo "    restart           Restart the proxy container"
     echo "    status            Show proxy container status"
+    echo "    logs              Show container logs"
     echo "    enable            Enable container auto-start with system"
     echo "    disable           Disable container auto-start with system"
     echo
@@ -747,6 +748,44 @@ function container_restart() {
     container_start
 }
 
+function container_logs() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -f|--follow)
+                FOLLOW=1
+                shift
+                ;;
+            -h|--help)
+                echo "Usage: openai-proxy container logs [OPTIONS]"
+                echo
+                echo "Show proxy container logs"
+                echo
+                echo "Options:"
+                echo "  -h, --help    Show this help message"
+                echo "  -f, --follow  Follow log output"
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Usage: openai-proxy container logs [-f|--follow]"
+                exit 1
+                ;;
+        esac
+    done
+
+    # Check dependencies before showing logs
+    check_container_deps
+    
+    # Ensure we're in the project root
+    ensure_project_root
+
+    if [ "${FOLLOW:-0}" -eq 1 ]; then
+        podman logs -f openai-proxy
+    else
+        podman logs openai-proxy
+    fi
+}
+
 function container_disable() {
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -817,6 +856,10 @@ case "${1:-}" in
             restart)
                 shift
                 container_restart "$@"
+                ;;
+            logs)
+                shift
+                container_logs "$@"
                 ;;
             disable)
                 shift
