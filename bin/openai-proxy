@@ -489,7 +489,7 @@ function container_start() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             -h|--help)
-                echo "Usage: openai-proxy container-start [OPTIONS]"
+                echo "Usage: openai-proxy container start [OPTIONS]"
                 echo
                 echo "Start the proxy container"
                 echo
@@ -499,7 +499,7 @@ function container_start() {
                 ;;
             *)
                 echo "Unknown option: $1"
-                echo "Usage: openai-proxy container-start"
+                echo "Usage: openai-proxy container start"
                 exit 1
                 ;;
         esac
@@ -512,8 +512,28 @@ function container_start() {
     ensure_project_root
 
     echo -e "${YELLOW}Starting proxy container...${NC}"
-    podman-compose up -d
-    echo -e "${GREEN}Proxy container started${NC}"
+    
+    # Try to start with podman-compose
+    if ! output=$(podman-compose up -d 2>&1); then
+        # If there's an error about container already existing
+        if echo "$output" | grep -q "already in use"; then
+            echo -e "${YELLOW}Container already exists. Stopping and removing...${NC}"
+            podman-compose down
+            echo -e "${YELLOW}Retrying container start...${NC}"
+            if podman-compose up -d; then
+                echo -e "${GREEN}Proxy container started${NC}"
+            else
+                echo -e "${RED}Failed to start proxy container${NC}"
+                exit 1
+            fi
+        else
+            echo -e "${RED}Failed to start proxy container:${NC}"
+            echo "$output"
+            exit 1
+        fi
+    else
+        echo -e "${GREEN}Proxy container started${NC}"
+    fi
 }
 
 function container_stop() {
