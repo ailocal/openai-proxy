@@ -35,11 +35,12 @@ Commands:
   stop               Stop HAProxy on the host 
   status             Show HAProxy status on the host
 
-  start-container    Start the proxy container
-  stop-container     Stop the proxy container
-  status-container   Show proxy container status
-  enable-container   Enable container auto-start with system
-  disable-container  Disable container auto-start with system
+  container          Manage container operations:
+    start             Start the proxy container
+    stop              Stop the proxy container
+    status            Show proxy container status
+    enable            Enable container auto-start with system
+    disable           Disable container auto-start with system
 
 Global Options:
   -h, --help     Show this help message
@@ -70,7 +71,7 @@ haproxy -f config/haproxy/conf.d/openai-proxy.cfg
 **Option B: Using Containers**
 ```bash
 # Using podman-compose
-podman-compose up -d
+openai-proxy container start
 
 # Or using plain podman
 podman run -d \
