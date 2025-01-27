@@ -511,18 +511,23 @@ function container_start() {
     # Ensure we're in the project root
     ensure_project_root
 
+    # Check if container is already running
+    if podman-compose ps 2>/dev/null | grep -q "openai-proxy.*Up"; then
+        echo -e "${YELLOW}Container is already running${NC}"
+        podman-compose ps
+        exit 0
+    fi
+
     echo -e "${YELLOW}Starting proxy container...${NC}"
     
     # Try to start with podman-compose
     if ! output=$(podman-compose up -d 2>&1); then
         # If there's an error about container already existing
         if echo "$output" | grep -q "already in use"; then
-            echo -e "${YELLOW}Container already exists. Stopping and removing...${NC}"
+            echo -e "${YELLOW}Container exists but not running. Cleaning up...${NC}"
             podman-compose down
             echo -e "${YELLOW}Retrying container start...${NC}"
-            if podman-compose up -d; then
-                echo -e "${GREEN}Proxy container started${NC}"
-            else
+            if ! podman-compose up -d; then
                 echo -e "${RED}Failed to start proxy container${NC}"
                 exit 1
             fi
@@ -531,9 +536,26 @@ function container_start() {
             echo "$output"
             exit 1
         fi
-    else
-        echo -e "${GREEN}Proxy container started${NC}"
     fi
+
+    # Wait for container to be healthy (up to 30 seconds)
+    echo -e "${YELLOW}Waiting for container to be ready...${NC}"
+    for i in {1..6}; do
+        if podman-compose ps | grep -q "openai-proxy.*healthy"; then
+            echo -e "${GREEN}Proxy container started and healthy${NC}"
+            podman-compose ps
+            exit 0
+        elif podman-compose ps | grep -q "openai-proxy.*unhealthy"; then
+            echo -e "${RED}Container is unhealthy${NC}"
+            podman-compose ps
+            exit 1
+        fi
+        sleep 5
+    done
+
+    echo -e "${YELLOW}Container started but health check timed out${NC}"
+    podman-compose ps
+    exit 1
 }
 
 function container_stop() {
