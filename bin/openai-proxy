@@ -805,18 +805,18 @@ function container_exec() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             -h|--help)
-                echo "Usage: openai-proxy container exec [OPTIONS]"
+                echo "Usage: openai-proxy container exec [OPTIONS] [COMMAND]"
                 echo
-                echo "Connect to container shell"
+                echo "Connect to container shell or run command"
                 echo
                 echo "Options:"
                 echo "  -h, --help  Show this help message"
+                echo
+                echo "If no command is provided, opens an interactive shell"
                 exit 0
                 ;;
             *)
-                echo "Unknown option: $1"
-                echo "Usage: openai-proxy container exec"
-                exit 1
+                break
                 ;;
         esac
     done
@@ -833,8 +833,12 @@ function container_exec() {
         exit 1
     fi
 
-    echo -e "${YELLOW}Connecting to container shell...${NC}"
-    podman exec -it openai-proxy sh
+    if [ $# -eq 0 ]; then
+        echo -e "${YELLOW}Connecting to container shell...${NC}"
+        podman exec -it openai-proxy sh
+    else
+        podman exec openai-proxy "$@"
+    fi
 }
 
 function container_disable() {
