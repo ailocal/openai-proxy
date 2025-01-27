@@ -836,9 +836,15 @@ function container_exec() {
     if [ $# -eq 0 ]; then
         echo -e "${YELLOW}Connecting to container shell...${NC}"
         podman exec -it openai-proxy sh
-    elif [ "$1" = "wget" ] && [[ "$*" =~ "localhost:" ]]; then
-        # Replace localhost with 127.0.0.1 for wget commands
-        modified_cmd="${@/localhost:/127.0.0.1:}"
+    elif [ "$1" = "wget" ]; then
+        # Add -S flag for headers and handle localhost replacement
+        if [[ "$*" =~ "localhost:" ]]; then
+            modified_cmd="${@/localhost:/127.0.0.1:}"
+        else
+            modified_cmd="$@"
+        fi
+        # Insert -S flag after wget command
+        modified_cmd="${modified_cmd/wget/wget -S}"
         podman exec openai-proxy $modified_cmd
     else
         podman exec openai-proxy "$@"
