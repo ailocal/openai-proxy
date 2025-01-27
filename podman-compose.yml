@@ -7,9 +7,4 @@ services:
       - ./config/haproxy/conf.d/openai-proxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     ports:
       - "127.0.0.1:2020:2020"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:2020/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 3
     restart: always

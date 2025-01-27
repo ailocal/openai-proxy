@@ -538,27 +538,23 @@ function container_start() {
         fi
     fi
 
-    # Wait for container to be healthy (up to 30 seconds)
+    # Wait for container to be ready (up to 30 seconds)
     echo -e "${YELLOW}Waiting for container to be ready...${NC}"
     for i in {1..6}; do
-        if podman-compose ps | grep -q "openai-proxy.*healthy"; then
-            echo -e "${GREEN}Proxy container started and healthy${NC}"
+        if nc -z localhost 2020; then
+            echo -e "${GREEN}Proxy container started and listening on port 2020${NC}"
             podman-compose ps
             exit 0
-        elif podman-compose ps | grep -q "openai-proxy.*unhealthy"; then
-            echo -e "${RED}Container is unhealthy${NC}"
-            echo -e "${YELLOW}Container logs:${NC}"
-            podman logs openai-proxy
-            echo -e "${YELLOW}Testing health endpoint directly:${NC}"
-            curl -v http://localhost:2020/health || true
-            podman-compose ps
-            exit 1
         fi
-        echo -e "${YELLOW}Still waiting... (attempt $i/6)${NC}"
+        echo -e "${YELLOW}Still waiting for port 2020... (attempt $i/6)${NC}"
         sleep 5
     done
 
-    echo -e "${YELLOW}Container started but health check timed out${NC}"
+    echo -e "${RED}Container started but not responding${NC}"
+    echo -e "${YELLOW}Debug information:${NC}"
+    echo -e "Container logs:"
+    podman logs openai-proxy
+    echo -e "\nContainer status:"
     podman-compose ps
     exit 1
 }
