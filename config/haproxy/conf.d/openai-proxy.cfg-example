@@ -2,10 +2,8 @@
 # Install in: /etc/haproxy/conf.d/openai-proxy.cfg
 
 global
-    log stdout local0 debug
 
 defaults
-    log     global
     mode    http
     option  httplog
     option  dontlognull
