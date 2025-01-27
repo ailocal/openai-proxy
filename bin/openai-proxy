@@ -608,8 +608,8 @@ function container_stop() {
     # If service wasn't stopped, try podman-compose
     if [ "$service_stopped" -eq 0 ]; then
         if podman-compose ps 2>/dev/null | grep -q "openai-proxy"; then
-            echo -e "${YELLOW}Stopping container with podman-compose...${NC}"
-            podman-compose down
+            echo -e "${YELLOW}Stopping and removing container with podman-compose...${NC}"
+            podman-compose down -v
         else
             echo -e "${YELLOW}No running container found${NC}"
             exit 0
