@@ -2,7 +2,7 @@
 # Install in: /etc/haproxy/conf.d/openai-proxy.cfg
 
 frontend openai_proxy
-    bind 127.0.0.1:2020
+    bind :2020
     mode http
 
     # Set required proxy headers
