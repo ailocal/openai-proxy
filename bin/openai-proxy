@@ -814,7 +814,7 @@ function container_exec() {
     ensure_project_root
 
     # Check if container is running
-    if ! podman-compose ps 2>/dev/null | grep -q "openai-proxy.*Up"; then
+    if ! podman-compose ps 2>/dev/null | grep -q "openai-proxy.*Up.*"; then
         echo -e "${RED}Container is not running${NC}"
         exit 1
     fi
