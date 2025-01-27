@@ -2,14 +2,18 @@
 # Install in: /etc/haproxy/conf.d/openai-proxy.cfg
 
 global
-    log stdout local0 notice
+    log stdout local0 debug
 
 defaults
     log     global
     mode    http
     option  httplog
+    option  dontlognull
+    option  log-separate-errors
+    option  http-use-htx
     option  http-server-close
     option  http-pretend-keepalive
+    log-format "%ci:%cp [%tr] %ft %b/%s %TR/%Tw/%Tc/%Tr/%Ta %ST %B %CC %CS %tsc %ac/%fc/%bc/%sc/%rc %sq/%bq %hr %hs %{+Q}r"
     timeout connect 5000
     timeout client  50000
     timeout server  50000
