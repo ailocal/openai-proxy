@@ -3,6 +3,7 @@ services:
   openai-proxy:
     image: haproxytech/haproxy-alpine:latest
     container_name: openai-proxy
+    command: haproxy -f /usr/local/etc/haproxy/haproxy.cfg -f /usr/local/etc/haproxy/conf.d/openai-proxy.cfg
     volumes:
       - ./config/haproxy/conf.d/openai-proxy.cfg:/usr/local/etc/haproxy/conf.d/openai-proxy.cfg:ro
     ports:
