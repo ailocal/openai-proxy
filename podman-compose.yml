@@ -9,10 +9,10 @@ services:
       - ./openai-proxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     ports:
       - "0.0.0.0:2020:2020"
-      - "[::]:2020:2020"
+      # - "[::]:2020:2020"
     sysctls:
-      - net.ipv6.conf.all.disable_ipv6=0
-      - net.ipv6.conf.default.disable_ipv6=0
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
     restart: always
     healthcheck:
       test: ["CMD", "wget", "-O-", "-S", "127.0.0.1:2020/health"]

@@ -49,14 +49,13 @@ The config file has comments explains how to configure alternative targets for O
 
 ### 3. Run HAProxy with the provided config
 
-Some suggestions for running HAProxy:
+You can manually start HAProxy by running:
 
-- **Container**: `podman-compose up`
-- **Manual**: `haproxy -f openai-proxy.cfg`
-- **System Service**:
-  - Install haproxy: Use your systems package manager (or `brew`)
-  - Copy config file: `sudo cp openai-proxy.cfg /etc/haproxy/conf.d/`
-  - Restart haproxy
+```shell
+haproxy -f openai-proxy.cfg
+```
+
+You can also run it as a system service, in a container, etc.
 
 ### 4. Verify It Works
 
