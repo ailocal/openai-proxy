@@ -1,17 +1,18 @@
 version: "3.9"
 services:
   openai-proxy:
-    image: haproxytech/haproxy-alpine:latest
+    image: haproxy:2.8-alpine
     container_name: openai-proxy
-    command: haproxy -f /usr/local/etc/haproxy/haproxy.cfg -f /usr/local/etc/haproxy/conf.d/openai-proxy.cfg
+    entrypoint: ["haproxy", "-f"]
+    command: ["/usr/local/etc/haproxy/haproxy.cfg"]
     volumes:
-      - ./config/haproxy/conf.d/openai-proxy.cfg:/usr/local/etc/haproxy/conf.d/openai-proxy.cfg:ro
+      - ./openai-proxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     ports:
       - "0.0.0.0:2020:2020"
-      - "[::]:2020:2020"
+      # - "[::]:2020:2020"
     sysctls:
-      - net.ipv6.conf.all.disable_ipv6=0
-      - net.ipv6.conf.default.disable_ipv6=0
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
     restart: always
     healthcheck:
       test: ["CMD", "wget", "-O-", "-S", "127.0.0.1:2020/health"]
@@ -19,3 +20,4 @@ services:
       timeout: 10s
       retries: 3
       start_period: 5s
+    rm: true

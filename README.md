@@ -1,6 +1,7 @@
 ---
 alias: openai-proxy
 ---
+
 # openai-proxy
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -24,144 +25,83 @@ Uses [HAProxy](https://haproxy.org), the Reliable, High Performance TCP/HTTP Loa
 
 ## Usage
 
-```shell
-Usage: openai-proxy <command> [options]
+### 1. Configure Your Environment
 
-Commands:
-  check-config        Check HAProxy configuration syntax
-  check-endpoints     Test the OpenAI API endpoints
-
-  start              Start HAProxy directly on the host
-  stop               Stop HAProxy on the host 
-  status             Show HAProxy status on the host
-
-  container          Manage container operations:
-    start             Start the proxy container
-    stop              Stop the proxy container
-    status            Show proxy container status
-    enable            Enable container auto-start with system
-    disable           Disable container auto-start with system
-
-Global Options:
-  -h, --help     Show this help message
-  -v, --verbose  Show detailed output
-```
-
-## How It Works
-
-### 1. Start the Proxy
-
-Choose one of these methods:
-
-**Option A: Direct with HAProxy**
-```bash
-# Debian/Ubuntu
-sudo apt install haproxy
-
-# Fedora/RHEL
-sudo dnf install haproxy
-
-# macOS
-brew install haproxy
-
-# Run the proxy
-haproxy -f config/haproxy/conf.d/openai-proxy.cfg
-```
-
-**Option B: Using Containers**
-```bash
-# Using podman-compose
-openai-proxy container start
-
-# Or using plain podman
-podman run -d \
-  --name openai-proxy \
-  --network host \
-  -v ./config/haproxy/conf.d/openai-proxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro \
-  -p 127.0.0.1:2020:2020 \
-  haproxytech/haproxy-alpine:latest
-```
-
-### 2. Configure Your Environment
-
-The `OPENAI_BASE_URL` environment variable must be set for any tool using an OpenAI SDK to use your proxy:
+The `OPENAI_BASE_URL` environment variable is used by OpenAI's `openai-python` SDK.
+Some other tools / libraries still use the old variable `OPENAI_API_BASE`.
 
 ```bash
 OPENAI_BASE_URL=http://localhost:2020/v1
+OPENAI_API_BASE="$OPENAI_BASE_URL"
 ```
 
 You can set this in several ways:
+
 - In your shell startup file (~/.bashrc, ~/.zshrc, etc)
 - For the current session: `export OPENAI_BASE_URL=http://localhost:2020/v1`
 - When running a command: `OPENAI_BASE_URL=http://localhost:2020/v1 aider`
 - In a project's .env file
 - In your tool's configuration file (e.g. .aiderrc)
 
-### 3. Verify It Works
+### 2. Edit openai-proxy.cfg
 
-Use the built-in endpoint checker to verify your setup:
+The config file has comments explains how to configure alternative targets for OpenAI endpoints.
 
-```bash
-$ openai-proxy check-endpoints
-Testing OpenAI Proxy endpoints...
+### 3. Run HAProxy with the provided config
 
-1. Testing /v1/audio/transcriptions...
-✓ Audio transcription endpoint working
-
-2. Testing /v1/chat/completions...
-✓ Chat completions endpoint working
-
-3. Testing /v1/audio/speech...
-✓ Audio speech endpoint working
-
-Verification complete!
-```
-
-Note: This requires your `OPENAI_API_KEY` to be set in the environment.
-
-## Configuration
-
-Configuration is provided through HAProxy's configuration file. A sample configuration is provided in `config/haproxy/conf.d/openai-proxy.cfg-example`. When you first run the proxy, it will offer to copy this example configuration for you.
-
-See the [detailed configuration guide](docs/configuration.md) for complete information about configuring endpoints and routing.
-
-
-## Usage
+You can manually start HAProxy by running:
 
 ```shell
-Usage: openai-proxy <command> [options]
-
-Commands:
-  check-config        Check HAProxy configuration syntax
-  check-endpoints     Test the OpenAI API endpoints
-
-  start              Start HAProxy directly on the host
-  stop               Stop HAProxy on the host 
-  status             Show HAProxy status on the host
-
-  start-container    Start the proxy container
-  stop-container     Stop the proxy container
-  status-container   Show proxy container status
-  enable-container   Enable container auto-start with system
-  disable-container  Disable container auto-start with system
-
-Global Options:
-  -h, --help     Show this help message
-  -v, --verbose  Show detailed output
+haproxy -f openai-proxy.cfg
 ```
 
-## Testing
+You can also run it as a system service, in a container, etc.
 
-To verify that the proxy is working correctly:
+### 4. Verify It Works
 
-1. Start the proxy.
-2. Send a request to one of the routed endpoints:
+Use the provided endpoint checker to verify your setup:
 
-    ```shell
-    curl http://localhost:2020/v1/chat/completions
-    ```
+```bash
+$ bin/test-endpoints
 
-3. Ensure the request is routed to the correct backend.
+Testing OpenAI Proxy endpoints...
+
+1. Testing /v1/chat/completions...
+✓ Chat completions endpoint working
+   HAProxy Backend: chat_ollama
+   Generated text: "
+Quesadillas are the ultimate food for space travelers because they're lightweight, flavorful, and can be easily reheated in a microwave on a distant planet. #quesadillacosmos"
+
+2. Testing /v1/audio/speech...
+   Using voice: af_alloy
+   Using payload: {
+    "model": "tts-1",
+    "input": "
+Quesadillas are the ultimate food for space travelers because they're lightweight, flavorful, and can be easily reheated in a microwave on a distant planet. #quesadillacosmos",
+    "voice": "af_alloy"
+  }
+✓ Audio speech endpoint working
+   HAProxy Backend: speech_local
+   Generated audio file: 164K
+   Audio file type: Audio file with ID3 version 2.4.0, contains:
+- MPEG ADTS, layer III, v2, 128 kbps, 24 kHz, Monaural
+
+3. Testing /v1/audio/transcriptions...
+✓ Audio transcription endpoint working
+   HAProxy Backend: transcriptions_ailocal
+   Transcribed text: " Quesadillas are the ultimate food for space travelers because they're lightweight, flavorful,
+ and can be easily reheated in a microwave on a distant planet.
+ Hash Quesadilla Cosmos.
+"
+   ✓ Found similarities between original text and transcription
+
+=== Test Summary ===
+1. Chat completions: PASS
+2. Audio speech: PASS
+3. Audio transcription: PASS
+
+All tests passed successfully!
+```
 
 ## Troubleshooting
 
@@ -170,65 +110,11 @@ To verify that the proxy is working correctly:
 - **Configuration errors**: Check the environment variables and ensure they are correctly set.
 - **Missing Backend Mapping**: If a specific API path is not routed as expected, ensure the corresponding environment variable is defined correctly.
 
-## Verifying the Setup
-
-You can verify your setup using two check commands:
-
-### 1. Check Configuration
-
-Verify the HAProxy configuration syntax:
-
-```bash
-$ openai-proxy check-config
-Checking HAProxy configuration: /etc/haproxy/conf.d/openai-proxy.cfg
-Configuration is valid
-```
-
-For more detailed output, use the verbose flag:
-
-```bash
-$ openai-proxy check-config -v
-Checking HAProxy configuration: /etc/haproxy/conf.d/openai-proxy.cfg
-Configuration file /etc/haproxy/conf.d/openai-proxy.cfg has valid syntax
-Configuration is valid
-```
-
-### 2. Check Endpoints
-
-Test that all OpenAI API endpoints are reachable through the proxy:
-
-```bash
-$ openai-proxy check-endpoints
-Testing OpenAI Proxy endpoints...
-
-1. Testing /v1/audio/transcriptions...
-✓ Audio transcription endpoint working
-Response: {"text": "huge manatees"}
-
-2. Testing /v1/chat/completions...
-✓ Chat completions endpoint working
-
-3. Testing /v1/audio/speech...
-✓ Audio speech endpoint working
-
-Verification complete!
-```
-
-For detailed API responses, use the verbose flag:
-
-```bash
-$ openai-proxy check-endpoints -v
-```
-
-Note: The endpoints check requires your `OPENAI_API_KEY` to be set in the environment.
-
 ## License
 
 This project is licensed under the MIT License.
-
 
 ## See Also
 
 - [OpenAI API Documentation](https://platform.openai.com/docs/api-reference)
 - [HAProxy Documentation](https://www.haproxy.org/#docs)
-- [justsayit (addons.mozilla.org)](https://addons.mozilla.org/en-US/firefox/addon/justsayit/): Enables voice typing on many websites using any Whisper API service.

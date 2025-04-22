@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -o nounset -o pipefail -o errexit
+
+# Color constants
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Get the real path of the script, following symlinks
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Ensure we're in the project root when running container commands
+function ensure_project_root() {
+  if ! cd "$PROJECT_ROOT"; then
+    echo -e "${RED}Error: Could not change to project root directory: $PROJECT_ROOT${NC}" >&2
+    exit 1
+  fi
+}
+
+# Config paths
+DEFAULT_CONFIG_PATH="openai-proxy.cfg"
+EXAMPLE_CONFIG_PATH="openai-proxy.cfg-example"
+
+function check_config() {
+  local verbose=0
+  local config_path="$DEFAULT_CONFIG_PATH"
+
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+    -v | --verbose)
+      verbose=1
+      shift
+      ;;
+    -h | --help)
+      echo "Usage: openai-proxy config-check [OPTIONS] [CONFIG_PATH]"
+      echo
+      echo "Check HAProxy configuration syntax"
+      echo
+      echo "Options:"
+      echo "  -h, --help     Show this help message"
+      echo "  -v, --verbose  Show detailed output"
+      echo
+      echo "Default config path: $config_path"
+      exit 0
+      ;;
+    *)
+      if [ -f "$1" ]; then
+        config_path="$1"
+      else
+        echo -e "${RED}Error: Config file not found: $1${NC}" >&2
+        exit 1
+      fi
+      shift
+      ;;
+    esac
+  done
+
+  # Check if haproxy is installed
+  if ! command -v haproxy &>/dev/null; then
+    echo -e "${RED}Error: haproxy is not installed${NC}" >&2
+    exit 1
+  fi
+
+  echo -e "${YELLOW}Checking HAProxy configuration: $config_path${NC}"
+
+  if [ "$verbose" -eq 1 ]; then
+    if haproxy -c -V -f "$config_path"; then
+      echo -e "${GREEN}Configuration is valid${NC}"
+      exit 0
+    else
+      echo -e "${RED}Configuration check failed${NC}"
+      exit 1
+    fi
+  else
+    if haproxy -c -q -f "$config_path"; then
+      echo -e "${GREEN}Configuration is valid${NC}"
+      exit 0
+    else
+      echo -e "${RED}Configuration check failed${NC}"
+      exit 1
+    fi
+  fi
+}
+
+check_config
