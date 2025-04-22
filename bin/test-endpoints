@@ -1,0 +1,497 @@
+#!/usr/bin/env bash
+set -o nounset -o pipefail # -o errexit
+
+# Color constants
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Print help if help flag is a direct argument
+if [[ "$#" -gt 0 ]]; then
+  if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
+    echo "Usage: $(basename "$0") [OPTIONS]"
+    echo
+    echo "Test OpenAI API endpoints"
+    echo
+    echo "Options:"
+    echo "  -h, --help     Show this help message"
+    echo "  -v, --verbose  Show detailed output with curl verbose output"
+    echo "  -H, --headers  Show all response headers"
+    exit 0
+  fi
+fi
+
+# Get the real path of the script, following symlinks
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Ensure we're in the project root when running container commands
+function ensure_project_root() {
+  if ! cd "$PROJECT_ROOT"; then
+    echo -e "${RED}Error: Could not change to project root directory: $PROJECT_ROOT${NC}" >&2
+    exit 1
+  fi
+}
+
+# Config paths
+DEFAULT_CONFIG_PATH="openai-proxy.cfg"
+EXAMPLE_CONFIG_PATH="openai-proxy.cfg-example"
+
+# Global variables to store test results
+verbose=0
+show_headers=0
+llm_response=""
+audio_file="test.mp3"
+
+# Function to display backend information
+display_backend_info() {
+  local backend_header="$1"
+  local request_id="$2"
+  
+  if [[ -n "$backend_header" ]]; then
+    echo -e "   HAProxy Backend: ${GREEN}$backend_header${NC}"
+  fi
+  
+  if [[ -n "$request_id" ]]; then
+    echo -e "   Request ID: ${BLUE}$request_id${NC}"
+  fi
+}
+
+# Function to show headers if requested
+show_response_headers() {
+  local headers="$1"
+  
+  if [ "$show_headers" -eq 1 ]; then
+    echo -e "\n${BLUE}Response Headers:${NC}"
+    echo -e "${YELLOW}$(echo "$headers" | grep -v "curl_error")${NC}"
+  fi
+}
+
+# Function to test chat completions
+test_chat_completions() {
+  echo -e "\n${YELLOW}1. Testing /v1/chat/completions...${NC}"
+  
+  # First check where the request is going with a simple OPTIONS request
+  server_info=$(curl -s -I -X OPTIONS http://localhost:2020/v1/chat/completions 2>&1)
+  server_header=$(echo "$server_info" | grep -i 'Server:' | cut -d' ' -f2- | tr -d '\r')
+
+  # Get full headers from a separate request
+  headers=$(curl -s -D - -X POST \
+    -H "Authorization: Bearer $OPENAI_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+            "model": "gpt-3.5-turbo",
+            "messages": [{"role": "user", "content": "Say something random"}]
+        }' \
+    -o /dev/null http://localhost:2020/v1/chat/completions)
+
+  # Extract backend info from headers
+  backend_header=$(echo "$headers" | grep -i 'X-Backend:' | cut -d' ' -f2- | tr -d '\r')
+  request_id=$(echo "$headers" | grep -i 'X-Request-ID:' | cut -d' ' -f2- | tr -d '\r')
+
+  # Determine which model to use based on backend
+  model="gpt-3.5-turbo"
+  if [[ "$backend_header" == *"ollama"* ]]; then
+    model="llama2"
+  fi
+
+  # Now do the actual request
+  response=$(curl -s -w "\n%{http_code}" -X POST \
+    -H "Authorization: Bearer $OPENAI_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d "{
+            \"model\": \"$model\",
+            \"messages\": [{\"role\": \"user\", \"content\": \"Say something random\"}]
+        }" \
+    http://localhost:2020/v1/chat/completions)
+
+  http_code=$(echo "$response" | tail -n1)
+  body=$(echo "$response" | sed '$ d')
+
+  if [[ $http_code -eq 200 ]] && [[ "$body" == *"content"* ]]; then
+    echo -e "${GREEN}✓ Chat completions endpoint working${NC}"
+    
+    # Display backend info
+    display_backend_info "$backend_header" "$request_id"
+    
+    # Show headers if requested
+    show_response_headers "$headers"
+    
+    # Extract the response content to use in the next test
+    content=$(echo "$body" | grep -o '"content"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/"content"[[:space:]]*:[[:space:]]*"\(.*\)"/\1/')
+    if [[ -n "$content" ]]; then
+      llm_response="$content"
+      echo -e "   Generated text: ${YELLOW}\"$llm_response\"${NC}"
+    else
+      llm_response="Hello world, this is a test message."
+      echo -e "   ${YELLOW}⚠ Could not extract response content, using default message${NC}"
+    fi
+    
+    if [ "$verbose" -eq 1 ]; then
+      echo -e "Full Response: ${YELLOW}$body${NC}"
+    fi
+    
+    return 0
+  else
+    echo -e "${RED}✗ Chat completions failed with HTTP code $http_code${NC}"
+    
+    # Display backend info
+    display_backend_info "$backend_header" "$request_id"
+    
+    # Show headers if requested
+    show_response_headers "$headers"
+    
+    echo -e "Response: ${YELLOW}$body${NC}"
+    
+    # Set default message for next test
+    llm_response="Hello world, this is a test message."
+    echo -e "   ${YELLOW}Using default message for next test: \"$llm_response\"${NC}"
+    
+    return 1
+  fi
+}
+
+# Function to test audio speech generation
+test_audio_speech() {
+  local input_text="$1"
+  
+  echo -e "\n${YELLOW}2. Testing /v1/audio/speech...${NC}"
+  
+  # First check where the request is going with a simple OPTIONS request
+  server_info=$(curl -s -I -X OPTIONS http://localhost:2020/v1/audio/speech 2>&1)
+  server_header=$(echo "$server_info" | grep -i 'Server:' | cut -d' ' -f2- | tr -d '\r')
+
+  # Check if voices are available (for any backend)
+  available_voices=$(curl -s http://localhost:2020/v1/audio/voices 2>/dev/null || echo "{}")
+  
+  # Default model and voice
+  model="tts-1"
+  voice="alloy"
+  
+  # Try to get a voice from the available voices
+  if [[ "$available_voices" == *"voices"* ]]; then
+    # Extract voice names from the voices array
+    voices_json=$(echo "$available_voices" | sed 's/.*"voices":\s*\[\([^]]*\)\].*/\1/')
+    # Get the first voice from the list
+    first_voice=$(echo "$voices_json" | grep -o '"[^"]*"' | head -1 | tr -d '"')
+    if [[ -n "$first_voice" ]]; then
+      voice="$first_voice"
+      echo -e "   Using voice: ${GREEN}$voice${NC}"
+    fi
+  fi
+  
+  # Create payload with the provided text
+  payload="{
+    \"model\": \"$model\",
+    \"input\": \"$input_text\",
+    \"voice\": \"$voice\"
+  }"
+  
+  echo -e "   Using payload: ${YELLOW}$payload${NC}"
+  
+  # First get headers to check status
+  response=$(curl -s -D - -X POST \
+    -H "Authorization: Bearer $OPENAI_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d "$payload" \
+    http://localhost:2020/v1/audio/speech -o /dev/null || echo "curl_error")
+  
+  http_code=$(echo "$response" | grep -i "^HTTP" | grep -oE '[0-9]{3}')
+  content_type=$(echo "$response" | grep -i 'Content-Type:' | cut -d' ' -f2- | tr -d '\r')
+  
+  # Extract backend info from headers
+  backend_header=$(echo "$response" | grep -i 'X-Backend:' | cut -d' ' -f2- | tr -d '\r')
+  request_id=$(echo "$response" | grep -i 'X-Request-ID:' | cut -d' ' -f2- | tr -d '\r')
+  
+  # If headers look good, try to download the file
+  if [[ "$response" != "curl_error" ]] && [[ -n "$http_code" ]] && [[ $http_code -eq 200 ]]; then
+    if curl -s -o "$audio_file" -X POST \
+      -H "Authorization: Bearer $OPENAI_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d "$payload" \
+      http://localhost:2020/v1/audio/speech; then
+      
+      # Check if file size is reasonable for an audio file (>1KB)
+      file_size=$(stat -c%s "$audio_file" 2>/dev/null || echo 0)
+      file_type=$(file -b "$audio_file" 2>/dev/null || echo "Unknown")
+      
+      if [[ $file_size -gt 1024 ]] && [[ "$file_type" == *"Audio"* || "$file_type" == *"audio"* ]]; then
+        echo -e "${GREEN}✓ Audio speech endpoint working${NC}"
+        
+        # Display backend info
+        display_backend_info "$backend_header" "$request_id"
+        
+        # Show headers if requested
+        show_response_headers "$response"
+        
+        # Display audio file information
+        echo -e "   Generated audio file: ${YELLOW}$(du -h "$audio_file" | cut -f1)${NC}"
+        echo -e "   Audio file type: ${YELLOW}$file_type${NC}"
+        
+        return 0
+      else
+        echo -e "${RED}✗ Audio speech endpoint returned an empty or invalid file${NC}"
+        
+        # Display backend info
+        display_backend_info "$backend_header" "$request_id"
+        
+        # Show headers if requested
+        show_response_headers "$response"
+        
+        # Display detailed file information
+        echo -e "   File size: ${YELLOW}$file_size bytes${NC}"
+        echo -e "   File type: ${YELLOW}$file_type${NC}"
+        
+        # Try to detect if it's JSON (often error messages are returned as JSON)
+        if [[ $file_size -gt 0 ]]; then
+          content_start=$(hexdump -C -n 32 "$audio_file" 2>/dev/null | head -n 2 || echo "Cannot read file")
+          echo -e "   File content start: ${YELLOW}\n$content_start${NC}"
+          
+          json_check=$(grep -l '{"' "$audio_file" 2>/dev/null)
+          if [[ -n "$json_check" ]]; then
+            json_content=$(cat "$audio_file")
+            echo -e "   JSON error content: ${YELLOW}$json_content${NC}"
+          fi
+        fi
+        
+        # Generate a default audio file for testing transcription
+        echo -e "   ${YELLOW}Using a default test audio file${NC}"
+        touch "$audio_file"
+        return 1
+      fi
+    else
+      echo -e "${RED}✗ Audio speech failed to download file${NC}"
+      
+      # Display backend info
+      display_backend_info "$backend_header" "$request_id"
+      
+      # Show headers if requested
+      show_response_headers "$response"
+      
+      # Generate a default audio file for testing transcription
+      echo -e "   ${YELLOW}Using a default test audio file${NC}"
+      touch "$audio_file"
+      return 1
+    fi
+  else
+    # Try to get the error response body
+    error_response=$(curl -s -X POST \
+      -H "Authorization: Bearer $OPENAI_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d "$payload" \
+      http://localhost:2020/v1/audio/speech)
+      
+    echo -e "${RED}✗ Audio speech failed with HTTP code ${http_code:-Unknown}${NC}"
+    
+    # Display backend info
+    display_backend_info "$backend_header" "$request_id"
+    
+    echo -e "   Content-Type: ${YELLOW}${content_type:-Unknown}${NC}"
+    
+    # Show headers if requested
+    show_response_headers "$response"
+    
+    echo -e "Response: ${YELLOW}$error_response${NC}"
+    
+    # Generate a default audio file for testing transcription
+    echo -e "   ${YELLOW}Using a default test audio file${NC}"
+    touch "$audio_file"
+    return 1
+  fi
+}
+
+# Function to test audio transcription
+test_audio_transcription() {
+  local audio_file="$1"
+  
+  echo -e "\n${YELLOW}3. Testing /v1/audio/transcriptions...${NC}"
+  
+  # Check file existence
+  if [[ ! -f "$audio_file" ]] || [[ ! -s "$audio_file" ]]; then
+    echo -e "${RED}✗ Audio file not found or empty: $audio_file${NC}"
+    return 1
+  fi
+  
+  # First check where the request is going with a simple OPTIONS request
+  server_info=$(curl -s -I -X OPTIONS http://localhost:2020/v1/audio/transcriptions 2>&1)
+  server_header=$(echo "$server_info" | grep -i 'Server:' | cut -d' ' -f2- | tr -d '\r')
+  
+  # Get response headers to check for server info before getting the actual response
+  headers=$(curl -s -D - -X POST \
+    -H "Authorization: Bearer $OPENAI_API_KEY" \
+    -H "Content-Type: multipart/form-data" \
+    -F file="@$audio_file" \
+    -F model="whisper-1" \
+    -o /dev/null http://localhost:2020/v1/audio/transcriptions || echo "curl_error")
+  
+  # Extract backend info from headers
+  backend_header=$(echo "$headers" | grep -i 'X-Backend:' | cut -d' ' -f2- | tr -d '\r')
+  request_id=$(echo "$headers" | grep -i 'X-Request-ID:' | cut -d' ' -f2- | tr -d '\r')
+  
+  # Perform the actual transcription
+  if [ "$verbose" -eq 1 ]; then
+    curl -v -X POST \
+      -H "Authorization: Bearer $OPENAI_API_KEY" \
+      -H "Content-Type: multipart/form-data" \
+      -F file="@$audio_file" \
+      -F model="whisper-1" \
+      http://localhost:2020/v1/audio/transcriptions
+    status=$?
+  else
+    output=$(curl -s -X POST \
+      -H "Authorization: Bearer $OPENAI_API_KEY" \
+      -H "Content-Type: multipart/form-data" \
+      -F file="@$audio_file" \
+      -F model="whisper-1" \
+      http://localhost:2020/v1/audio/transcriptions)
+    status=$?
+  fi
+  
+  # Initialize output variable to prevent unbound variable error
+  output=${output:-""}
+  
+  if [ "$status" -eq 0 ] && [[ "$output" == *"text"* ]]; then
+    echo -e "${GREEN}✓ Audio transcription endpoint working${NC}"
+    
+    # Display backend info
+    display_backend_info "$backend_header" "$request_id"
+    
+    # Show headers if requested
+    show_response_headers "$headers"
+    
+    # Extract the transcribed text
+    transcribed_text=$(echo "$output" | grep -o '"text"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"text"[[:space:]]*:[[:space:]]*"\(.*\)"/\1/')
+    if [[ -n "$transcribed_text" ]]; then
+      echo -e "   Transcribed text: ${YELLOW}\"$transcribed_text\"${NC}"
+      
+      # Compare with original text
+      if [[ -n "$llm_response" ]]; then
+        # Simple word-based similarity check
+        llm_words=$(echo "$llm_response" | tr -cs '[:alnum:]' ' ')
+        transcribed_words=$(echo "$transcribed_text" | tr -cs '[:alnum:]' ' ')
+        
+        # Count common words
+        common_count=0
+        for word in $llm_words; do
+          if [[ "$transcribed_words" == *"$word"* ]]; then
+            ((common_count++))
+          fi
+        done
+        
+        if [[ $common_count -gt 0 ]]; then
+          echo -e "   ${GREEN}✓ Found similarities between original text and transcription${NC}"
+        else
+          echo -e "   ${YELLOW}⚠ No clear similarity between original text and transcription${NC}"
+        fi
+      fi
+    else
+      echo -e "   ${YELLOW}⚠ Could not extract transcribed text${NC}"
+    fi
+    
+    return 0
+  else
+    echo -e "${RED}✗ Audio transcription failed${NC}"
+    
+    # Display backend info
+    display_backend_info "$backend_header" "$request_id"
+    
+    # Show headers if requested
+    show_response_headers "$headers"
+    
+    if [[ "$output" == *"error"* ]]; then
+      echo -e "   Error response: ${YELLOW}$output${NC}"
+    fi
+    
+    return 1
+  fi
+}
+
+# Main function to run all tests
+function test_endpoints() {
+  local args=("$@") # Store arguments so we can process them
+  
+  # Process arguments
+  while [[ ${#args[@]} -gt 0 ]]; do
+    case ${args[0]} in
+    -v | --verbose)
+      verbose=1
+      args=("${args[@]:1}") # Shift the array
+      ;;
+    -H | --headers)
+      show_headers=1
+      args=("${args[@]:1}") # Shift the array
+      ;;
+    -h | --help)
+      echo "Usage: $(basename "$0") [OPTIONS]"
+      echo
+      echo "Test OpenAI API endpoints"
+      echo
+      echo "Options:"
+      echo "  -h, --help     Show this help message"
+      echo "  -v, --verbose  Show detailed output with curl verbose output"
+      echo "  -H, --headers  Show all response headers"
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: ${args[0]}"
+      echo "Usage: $(basename "$0") [-h|--help] [-v|--verbose] [-H|--headers]"
+      exit 1
+      ;;
+    esac
+  done
+  
+  # Check if OPENAI_API_KEY is set
+  if [ -z "${OPENAI_API_KEY:-}" ]; then
+    echo -e "${RED}Error: OPENAI_API_KEY environment variable is not set${NC}"
+    exit 1
+  fi
+  
+  echo -e "${YELLOW}Testing OpenAI Proxy endpoints...${NC}"
+  
+  # Step 1: Generate text with LLM
+  test_chat_completions
+  chat_status=$?
+  
+  # Step 2: Convert text to speech
+  test_audio_speech "$llm_response"
+  speech_status=$?
+  
+  # Step 3: Transcribe the audio back to text
+  test_audio_transcription "$audio_file"
+  transcription_status=$?
+  
+  # Clean up
+  rm -f "$audio_file"
+  
+  # Display summary
+  echo -e "\n${GREEN}=== Test Summary ===${NC}"
+  if [ $chat_status -eq 0 ]; then
+    echo -e "1. Chat completions: ${GREEN}PASS${NC}"
+  else
+    echo -e "1. Chat completions: ${RED}FAIL${NC}"
+  fi
+  
+  if [ $speech_status -eq 0 ]; then
+    echo -e "2. Audio speech: ${GREEN}PASS${NC}"
+  else
+    echo -e "2. Audio speech: ${RED}FAIL${NC}"
+  fi
+  
+  if [ $transcription_status -eq 0 ]; then
+    echo -e "3. Audio transcription: ${GREEN}PASS${NC}"
+  else
+    echo -e "3. Audio transcription: ${RED}FAIL${NC}"
+  fi
+  
+  # Overall status
+  if [ $chat_status -eq 0 ] && [ $speech_status -eq 0 ] && [ $transcription_status -eq 0 ]; then
+    echo -e "\n${GREEN}All tests passed successfully!${NC}"
+  else
+    echo -e "\n${YELLOW}Some tests failed.${NC}"
+  fi
+}
+
+test_endpoints "$@"
